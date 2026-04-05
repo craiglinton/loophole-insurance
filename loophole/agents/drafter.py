@@ -21,11 +21,22 @@ def _format_resolved_cases(cases: list[Case]) -> str:
     return "\n\n".join(parts)
 
 
+def _build_template_block(state: SessionState) -> str:
+    if state.endorsement_template:
+        return (
+            "\nENDORSEMENT FORMAT TEMPLATE:\n"
+            "Follow this structural template for the endorsement output:\n"
+            f"{state.endorsement_template}\n"
+        )
+    return ""
+
+
 class EndorsementDrafter(BaseAgent):
     def _build_system_prompt(self, **kwargs: Any) -> str:
         return DRAFTER_SYSTEM
 
     def _build_user_message(self, state: SessionState, **kwargs: Any) -> str:
+        template_block = _build_template_block(state)
         case: Case | None = kwargs.get("case")
         if case is None:
             return DRAFTER_INITIAL.format(
@@ -33,12 +44,14 @@ class EndorsementDrafter(BaseAgent):
                 drafting_guidelines=state.drafting_guidelines,
                 policy_text=state.policy_text,
                 endorsement_goal=state.endorsement_goal,
+                endorsement_template_block=template_block,
             )
         return DRAFTER_REVISE.format(
             domain=state.domain,
             drafting_guidelines=state.drafting_guidelines,
             policy_text=state.policy_text,
             endorsement_goal=state.endorsement_goal,
+            endorsement_template_block=template_block,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",
             endorsement_version=state.current_endorsement.version,
             endorsement_text=state.current_endorsement.text,

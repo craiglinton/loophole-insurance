@@ -1,6 +1,6 @@
 model:
   default: "minimax-m2.7:cloud"
-  max_tokens: 4096
+  max_tokens: 8192
 
 temperatures:
   drafter: 0.4

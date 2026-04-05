@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -18,58 +19,36 @@ from loophole.agents.overreach_finder import OverreachFinder
 from loophole.llm import LLMClient
 from loophole.models import CaseStatus, CaseType, Endorsement, SessionState
 from loophole.session import SessionManager
+from loophole.template_browser import browse_and_select
 
 app = typer.Typer(name="loophole", add_completion=False)
 console = Console()
 
-DEFAULT_DRAFTING_GUIDELINES = """\
-1. Be surgical. The endorsement should modify only what is strictly necessary \
-to achieve its stated goal. Do not rewrite or restructure unrelated policy \
-provisions.
+TEMPLATES_DIR = Path("templates")
 
-2. Avoid unnecessary complexity. Prefer clear, direct language over elaborate \
-constructions. If a simple sentence achieves the same result as a multi-clause \
-provision, use the simple sentence.
 
-3. Respect the burden of proof framework. The insured bears the burden of \
-demonstrating that a claim falls within an insuring agreement. The carrier \
-bears the burden of demonstrating that an exclusion applies. Draft endorsement \
-language with these burdens in mind.
+# ---------------------------------------------------------------------------
+# Menu context — ephemeral workspace for pre-session selections
+# ---------------------------------------------------------------------------
 
-4. Define terms precisely. If the endorsement introduces a new concept, define \
-it explicitly. If it relies on an existing policy definition, reference it \
-rather than creating a parallel definition that could conflict.
+@dataclass
+class MenuContext:
+    config: dict = field(default_factory=dict)
+    selected_policy: Path | None = None
+    selected_guidelines: Path | None = None
+    selected_endorsement_template: Path | None = None
 
-5. Avoid ambiguity that favors one party. Courts generally construe ambiguous \
-policy language against the drafter (contra proferentem). Draft with the \
-assumption that any ambiguity will be resolved in favor of coverage.
 
-6. Preserve the policy's internal consistency. The endorsement should not \
-create contradictions with other policy provisions. Where the endorsement \
-intentionally overrides a base policy provision, state this explicitly.
-
-7. Consider the claims process. Draft language that can be applied by a claims \
-adjuster in practice, not just by a coverage attorney in litigation.
-
-8. Account for regulatory requirements. Endorsement language should not \
-inadvertently violate applicable insurance regulations or create provisions \
-that would be unenforceable in key jurisdictions.
-
-9. Use standard insurance drafting conventions. Follow the structure and \
-conventions of the base policy (e.g., defined terms are capitalized, \
-cross-references use section numbers, effective date is specified).
-
-10. Think about temporal scope. Be explicit about whether the endorsement \
-applies to incidents occurring after the endorsement effective date, claims \
-made after the endorsement effective date, or both."""
-
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 
 def _load_config() -> dict:
     config_path = Path("config.yaml")
     if config_path.exists():
         return yaml.safe_load(config_path.read_text())
     return {
-        "model": {"default": "minimax-m2.7:cloud", "max_tokens": 4096},
+        "model": {"default": "minimax-m2.7:cloud", "max_tokens": 8192},
         "temperatures": {
             "drafter": 0.4,
             "gap_finder": 0.9,
@@ -96,6 +75,24 @@ def _build_agents(config: dict) -> dict:
         "judge": Judge(llm, temperature=temps["judge"]),
     }
 
+
+def _default_drafting_guidelines() -> str:
+    path = TEMPLATES_DIR / "guidelines" / "drafting_guidelines.txt"
+    if path.exists():
+        return path.read_text().strip()
+    return (
+        "1. Be surgical — modify only what is necessary.\n"
+        "2. Avoid unnecessary complexity.\n"
+        "3. The insured bears the burden of proving coverage; the carrier "
+        "bears the burden of proving an exclusion applies.\n"
+        "4. Define terms precisely.\n"
+        "5. Avoid ambiguity — courts construe ambiguity against the drafter."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Display helpers
+# ---------------------------------------------------------------------------
 
 def _display_endorsement(endorsement: Endorsement) -> None:
     console.print()
@@ -138,6 +135,324 @@ def _get_multiline_input(prompt_text: str) -> str:
         lines.append(line)
     return "\n".join(lines).strip()
 
+
+def _display_round_summary(state, total, auto, escalated):
+    console.print()
+    table = Table(title=f"Round {state.current_round} Summary", show_header=False)
+    table.add_column("Metric", style="bold")
+    table.add_column("Value")
+    table.add_row("Cases found", str(total))
+    table.add_row("Auto-resolved", f"[green]{auto}[/green]")
+    table.add_row("Escalated to user", f"[red]{escalated}[/red]")
+    table.add_row("Endorsement version", f"v{state.current_endorsement.version}")
+    table.add_row("Total resolved cases", str(len(state.resolved_cases)))
+    console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# Main menu display
+# ---------------------------------------------------------------------------
+
+def _print_banner():
+    console.print()
+    console.print(
+        Panel(
+            "[bold]Loophole[/bold]\n"
+            "Adversarial Insurance Endorsement Drafter",
+            border_style="bright_blue",
+            padding=(1, 2),
+        )
+    )
+
+
+def _print_selections(ctx: MenuContext):
+    policy_name = ctx.selected_policy.name if ctx.selected_policy else None
+    guidelines_name = ctx.selected_guidelines.name if ctx.selected_guidelines else None
+    template_name = ctx.selected_endorsement_template.name if ctx.selected_endorsement_template else None
+
+    console.print()
+    console.print("  [bold]Current selections:[/bold]")
+    if policy_name:
+        console.print(f"    Policy:      [green]{policy_name}[/green]")
+    else:
+        console.print("    Policy:      [dim](none)[/dim]")
+    if guidelines_name:
+        console.print(f"    Guidelines:  [green]{guidelines_name}[/green]")
+    else:
+        console.print("    Guidelines:  [dim](default)[/dim]")
+    if template_name:
+        console.print(f"    Template:    [green]{template_name}[/green]")
+    else:
+        console.print("    Template:    [dim](none)[/dim]")
+    console.print()
+
+
+def _print_menu():
+    console.print("  1. [bold]Configure[/bold]              [dim]LLM settings, loop parameters[/dim]")
+    console.print("  2. [bold]Select policy[/bold]           [dim]Base policy to modify[/dim]")
+    console.print("  3. [bold]Select guidelines[/bold]       [dim]Endorsement drafting guidelines[/dim]")
+    console.print("  4. [bold]Select template[/bold]         [dim]Endorsement format template[/dim]")
+    console.print("  5. [bold]Start new session[/bold]       [dim]Draft and stress-test an endorsement[/dim]")
+    console.print("  6. [bold]Previous sessions[/bold]       [dim]Resume or review past sessions[/dim]")
+    console.print("  7. [bold]Exit[/bold]")
+    console.print()
+
+
+# ---------------------------------------------------------------------------
+# Menu handlers
+# ---------------------------------------------------------------------------
+
+def _configure_menu(ctx: MenuContext):
+    """Submenu for editing configuration values."""
+    while True:
+        config = ctx.config
+        console.print(Rule("[bold] Configure [/bold]", style="cyan"))
+        console.print()
+        console.print(f"  1. Model             [{config['model']['default']}]")
+        console.print(f"  2. Max output tokens  [{config['model']['max_tokens']}]")
+        console.print(f"  3. Drafter temp       [{config['temperatures']['drafter']}]")
+        console.print(f"  4. Gap finder temp    [{config['temperatures']['gap_finder']}]")
+        console.print(f"  5. Overreach temp     [{config['temperatures']['overreach_finder']}]")
+        console.print(f"  6. Judge temp         [{config['temperatures']['judge']}]")
+        console.print(f"  7. Max rounds         [{config['loop']['max_rounds']}]")
+        console.print(f"  8. Cases per agent    [{config['loop']['cases_per_agent']}]")
+        console.print(f"  9. [bold]Save to config.yaml[/bold]")
+        console.print(f"  0. [bold]Back[/bold]")
+        console.print()
+
+        choice = Prompt.ask("Select", default="0")
+
+        if choice == "1":
+            config["model"]["default"] = Prompt.ask("Model name", default=config["model"]["default"])
+        elif choice == "2":
+            config["model"]["max_tokens"] = int(Prompt.ask("Max output tokens", default=str(config["model"]["max_tokens"])))
+        elif choice == "3":
+            config["temperatures"]["drafter"] = float(Prompt.ask("Drafter temperature", default=str(config["temperatures"]["drafter"])))
+        elif choice == "4":
+            config["temperatures"]["gap_finder"] = float(Prompt.ask("Gap finder temperature", default=str(config["temperatures"]["gap_finder"])))
+        elif choice == "5":
+            config["temperatures"]["overreach_finder"] = float(Prompt.ask("Overreach temperature", default=str(config["temperatures"]["overreach_finder"])))
+        elif choice == "6":
+            config["temperatures"]["judge"] = float(Prompt.ask("Judge temperature", default=str(config["temperatures"]["judge"])))
+        elif choice == "7":
+            config["loop"]["max_rounds"] = int(Prompt.ask("Max rounds", default=str(config["loop"]["max_rounds"])))
+        elif choice == "8":
+            config["loop"]["cases_per_agent"] = int(Prompt.ask("Cases per agent", default=str(config["loop"]["cases_per_agent"])))
+        elif choice == "9":
+            Path("config.yaml").write_text(yaml.safe_dump(config, default_flow_style=False))
+            console.print("[green]Saved to config.yaml[/green]")
+        elif choice == "0":
+            break
+
+
+def _select_policy(ctx: MenuContext):
+    selected = browse_and_select(TEMPLATES_DIR / "policies", "Policy", console)
+    if selected:
+        ctx.selected_policy = selected
+
+
+def _select_guidelines(ctx: MenuContext):
+    selected = browse_and_select(TEMPLATES_DIR / "guidelines", "Guidelines", console)
+    if selected:
+        ctx.selected_guidelines = selected
+
+
+def _select_endorsement_template(ctx: MenuContext):
+    selected = browse_and_select(TEMPLATES_DIR / "endorsements", "Endorsement Template", console)
+    if selected:
+        ctx.selected_endorsement_template = selected
+
+
+def _start_new_session(ctx: MenuContext):
+    """Gather remaining inputs and launch a drafting session."""
+    if not ctx.selected_policy:
+        console.print("[red]Please select a base policy first (option 2).[/red]")
+        return
+
+    # Load file contents
+    policy_text = ctx.selected_policy.read_text().strip()
+
+    if ctx.selected_guidelines:
+        drafting_guidelines = ctx.selected_guidelines.read_text().strip()
+    else:
+        drafting_guidelines = _default_drafting_guidelines()
+
+    endorsement_template = None
+    if ctx.selected_endorsement_template:
+        endorsement_template = ctx.selected_endorsement_template.read_text().strip()
+
+    # Prompt for remaining inputs
+    console.print(Rule("[bold] New Session [/bold]", style="cyan"))
+
+    domain = Prompt.ask("\n[bold]Line of business[/bold] (e.g., cyber, D&O, E&O)", default="cyber")
+    goal = _get_multiline_input(
+        "What should this endorsement accomplish?"
+    )
+
+    if not goal:
+        console.print("[red]An endorsement goal is required.[/red]")
+        return
+
+    # Build session
+    config = ctx.config
+    agents = _build_agents(config)
+    session_id = f"{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    session_mgr = SessionManager(config.get("session_dir", "sessions"))
+
+    console.print("\n[bold]Drafting initial endorsement...[/bold]")
+    drafter: EndorsementDrafter = agents["drafter"]
+
+    placeholder = SessionState(
+        session_id=session_id,
+        domain=domain,
+        policy_text=policy_text,
+        endorsement_goal=goal,
+        drafting_guidelines=drafting_guidelines,
+        endorsement_template=endorsement_template,
+        current_endorsement=Endorsement(version=0, text=""),
+    )
+    initial_endorsement = drafter.draft_initial(placeholder)
+
+    state = session_mgr.create_session(
+        session_id, domain, policy_text, goal,
+        drafting_guidelines, endorsement_template, initial_endorsement,
+    )
+    _display_endorsement(state.current_endorsement)
+
+    if Confirm.ask("Begin adversarial testing?", default=True):
+        _run_adversarial_loop(state, agents, session_mgr, config)
+
+
+def _previous_sessions_menu(ctx: MenuContext):
+    """Submenu for viewing and resuming past sessions."""
+    config = ctx.config
+    session_mgr = SessionManager(config.get("session_dir", "sessions"))
+
+    while True:
+        console.print(Rule("[bold] Previous Sessions [/bold]", style="cyan"))
+        console.print()
+        console.print("  1. [bold]Resume a session[/bold]")
+        console.print("  2. [bold]List all sessions[/bold]")
+        console.print("  3. [bold]Visualize a session[/bold]")
+        console.print("  0. [bold]Back[/bold]")
+        console.print()
+
+        choice = Prompt.ask("Select", default="0")
+
+        if choice == "1":
+            _resume_session(ctx)
+        elif choice == "2":
+            _list_sessions(ctx)
+        elif choice == "3":
+            _visualize_session(ctx)
+        elif choice == "0":
+            break
+
+
+def _list_sessions(ctx: MenuContext):
+    session_mgr = SessionManager(ctx.config.get("session_dir", "sessions"))
+    sessions = session_mgr.list_sessions()
+
+    if not sessions:
+        console.print("[dim]No sessions found.[/dim]")
+        return
+
+    table = Table(title="Sessions")
+    table.add_column("Session ID")
+    table.add_column("Domain")
+    table.add_column("Round")
+    table.add_column("Cases")
+    table.add_column("Endorsement Version")
+    for s in sessions:
+        table.add_row(
+            s["id"], s["domain"],
+            str(s["round"]), str(s["cases"]), f"v{s['endorsement_version']}"
+        )
+    console.print(table)
+
+
+def _resume_session(ctx: MenuContext):
+    config = ctx.config
+    session_mgr = SessionManager(config.get("session_dir", "sessions"))
+
+    sessions = session_mgr.list_sessions()
+    if not sessions:
+        console.print("[red]No sessions found.[/red]")
+        return
+
+    table = Table(title="Available Sessions")
+    table.add_column("#", style="dim")
+    table.add_column("Session ID")
+    table.add_column("Domain")
+    table.add_column("Round")
+    table.add_column("Cases")
+    table.add_column("Endorsement Version")
+    for i, s in enumerate(sessions, 1):
+        table.add_row(
+            str(i), s["id"], s["domain"],
+            str(s["round"]), str(s["cases"]), f"v{s['endorsement_version']}"
+        )
+    console.print(table)
+
+    choice = Prompt.ask("Select session number (0 to cancel)", default="0")
+    try:
+        idx = int(choice)
+    except ValueError:
+        return
+    if idx == 0 or idx > len(sessions):
+        return
+
+    session_id = sessions[idx - 1]["id"]
+    state = session_mgr.load(session_id)
+    agents = _build_agents(config)
+
+    console.print(f"\n[bold]Resuming session:[/bold] {session_id}")
+    console.print(
+        f"Domain: {state.domain} | Round: {state.current_round} "
+        f"| Endorsement: v{state.current_endorsement.version}"
+    )
+    _display_endorsement(state.current_endorsement)
+
+    _run_adversarial_loop(state, agents, session_mgr, config)
+
+
+def _visualize_session(ctx: MenuContext):
+    config = ctx.config
+    session_mgr = SessionManager(config.get("session_dir", "sessions"))
+
+    sessions = session_mgr.list_sessions()
+    if not sessions:
+        console.print("[red]No sessions found.[/red]")
+        return
+
+    table = Table(title="Available Sessions")
+    table.add_column("#", style="dim")
+    table.add_column("Session ID")
+    table.add_column("Domain")
+    table.add_column("Cases")
+    for i, s in enumerate(sessions, 1):
+        table.add_row(str(i), s["id"], s["domain"], str(s["cases"]))
+    console.print(table)
+
+    choice = Prompt.ask("Select session number (0 to cancel)", default="0")
+    try:
+        idx = int(choice)
+    except ValueError:
+        return
+    if idx == 0 or idx > len(sessions):
+        return
+
+    session_id = sessions[idx - 1]["id"]
+    state = session_mgr.load(session_id)
+
+    from loophole.visualize import generate_html
+    report_path = generate_html(state)
+    console.print(f"[bold green]Report generated:[/bold green] {report_path}")
+
+
+# ---------------------------------------------------------------------------
+# Adversarial loop
+# ---------------------------------------------------------------------------
 
 def _run_adversarial_loop(state, agents, session_mgr, config):
     max_rounds = config["loop"]["max_rounds"]
@@ -183,11 +498,9 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
             result = judge.evaluate(state, case_obj)
 
             if result.resolvable:
-                # Validate against test suite
                 if result.proposed_revision and state.resolved_cases:
                     console.print(" [dim]validating...[/dim]", end="")
 
-                    # Have the drafter produce the actual revised endorsement
                     case_obj.resolution = result.resolution_summary or result.reasoning
                     case_obj.status = CaseStatus.AUTO_RESOLVED
                     case_obj.resolved_by = "judge"
@@ -199,19 +512,17 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                         state.current_endorsement = revised
                         state.endorsement_history.append(revised)
                         console.print(
-                            f" [green]Resolved → Endorsement v{revised.version}[/green]"
+                            f" [green]Resolved -> Endorsement v{revised.version}[/green]"
                         )
                         round_auto += 1
                     else:
-                        # Validation failed — escalate
                         case_obj.status = CaseStatus.ESCALATED
                         case_obj.resolution = None
                         case_obj.resolved_by = None
-                        console.print(" [red]Validation failed — escalating[/red]")
+                        console.print(" [red]Validation failed -- escalating[/red]")
                         _escalate(state, case_obj, validation.details, drafter)
                         round_escalated += 1
                 else:
-                    # No prior cases to validate against, or no proposed revision
                     case_obj.resolution = result.resolution_summary or result.reasoning
                     case_obj.status = CaseStatus.AUTO_RESOLVED
                     case_obj.resolved_by = "judge"
@@ -220,21 +531,18 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                     state.current_endorsement = revised
                     state.endorsement_history.append(revised)
                     console.print(
-                        f" [green]Resolved → Endorsement v{revised.version}[/green]"
+                        f" [green]Resolved -> Endorsement v{revised.version}[/green]"
                     )
                     round_auto += 1
             else:
-                # Unresolvable — escalate to user
-                console.print(" [red bold]Cannot resolve — escalating to you[/red bold]")
+                console.print(" [red bold]Cannot resolve -- escalating to you[/red bold]")
                 _escalate(state, case_obj, result.conflict_explanation or result.reasoning, drafter)
                 round_escalated += 1
 
             session_mgr.save(state)
 
-        # Round summary
         _display_round_summary(state, len(all_cases), round_auto, round_escalated)
 
-        # Continue?
         console.print()
         action = Prompt.ask(
             "[bold]Next?[/bold]",
@@ -258,7 +566,6 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
         f"[dim]Session saved to: sessions/{state.session_id}/[/dim]"
     )
 
-    # Generate HTML report
     from loophole.visualize import generate_html
     report_path = generate_html(state)
     console.print(f"[bold blue]HTML report:[/bold blue] {report_path}")
@@ -286,226 +593,46 @@ def _escalate(state, case_obj, conflict_text, drafter):
         f"[Case #{case_obj.id}] {decision}"
     )
 
-    # Drafter incorporates the user's decision
     console.print("  [dim]Updating endorsement...[/dim]")
     revised = drafter.revise(state, case_obj)
     state.current_endorsement = revised
     state.endorsement_history.append(revised)
-    console.print(f"  [green]Endorsement updated → v{revised.version}[/green]")
+    console.print(f"  [green]Endorsement updated -> v{revised.version}[/green]")
 
 
-def _display_round_summary(state, total, auto, escalated):
-    console.print()
-    table = Table(title=f"Round {state.current_round} Summary", show_header=False)
-    table.add_column("Metric", style="bold")
-    table.add_column("Value")
-    table.add_row("Cases found", str(total))
-    table.add_row("Auto-resolved", f"[green]{auto}[/green]")
-    table.add_row("Escalated to user", f"[red]{escalated}[/red]")
-    table.add_row("Endorsement version", f"v{state.current_endorsement.version}")
-    table.add_row("Total resolved cases", str(len(state.resolved_cases)))
-    console.print(table)
-
-
-@app.command()
-def new(
-    domain: str = typer.Option(None, help="Line of business (e.g., cyber, D&O, E&O)"),
-    policy_file: str = typer.Option(None, "--policy", "-p", help="Path to a text file with the base insurance policy"),
-    goal: str = typer.Option(None, "--goal", "-g", help="What the endorsement should accomplish"),
-    guidelines_file: str = typer.Option(None, "--guidelines", help="Path to endorsement drafting guidelines (uses built-in defaults if not provided)"),
-):
-    """Start a new Loophole session."""
-    console.print(
-        Panel(
-            "[bold]Loophole[/bold]\n"
-            "Adversarial Insurance Endorsement Drafter",
-            border_style="bright_blue",
-            padding=(1, 2),
-        )
-    )
-
-    config = _load_config()
-    agents = _build_agents(config)
-
-    if not domain:
-        domain = Prompt.ask("\n[bold]Line of business[/bold] (e.g., cyber, D&O, E&O)")
-
-    if policy_file:
-        policy_text = Path(policy_file).read_text().strip()
-        console.print(f"[dim]Loaded policy from {policy_file}[/dim]")
-    else:
-        policy_text = _get_multiline_input(
-            "Paste or type the base insurance policy (or relevant excerpt):"
-        )
-
-    if not goal:
-        goal = _get_multiline_input(
-            "What should this endorsement accomplish? (e.g., add an exclusion for state-sponsored cyber attacks):"
-        )
-
-    if guidelines_file:
-        drafting_guidelines = Path(guidelines_file).read_text().strip()
-        console.print(f"[dim]Loaded drafting guidelines from {guidelines_file}[/dim]")
-    else:
-        drafting_guidelines = DEFAULT_DRAFTING_GUIDELINES
-        console.print("[dim]Using default endorsement drafting guidelines[/dim]")
-
-    session_id = f"{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    session_mgr = SessionManager(config["session_dir"])
-
-    # Generate initial endorsement
-    console.print("\n[bold]Drafting initial endorsement...[/bold]")
-    drafter: EndorsementDrafter = agents["drafter"]
-
-    # Bootstrap: create a placeholder state for the initial draft
-    placeholder = SessionState(
-        session_id=session_id,
-        domain=domain,
-        policy_text=policy_text,
-        endorsement_goal=goal,
-        drafting_guidelines=drafting_guidelines,
-        current_endorsement=Endorsement(version=0, text=""),
-    )
-    initial_endorsement = drafter.draft_initial(placeholder)
-
-    state = session_mgr.create_session(session_id, domain, policy_text, goal, drafting_guidelines, initial_endorsement)
-    _display_endorsement(state.current_endorsement)
-
-    if Confirm.ask("Begin adversarial testing?", default=True):
-        _run_adversarial_loop(state, agents, session_mgr, config)
-
-
-@app.command()
-def resume(
-    session_id: str = typer.Argument(None, help="Session ID to resume"),
-):
-    """Resume an existing session."""
-    config = _load_config()
-    session_mgr = SessionManager(config["session_dir"])
-
-    if not session_id:
-        sessions = session_mgr.list_sessions()
-        if not sessions:
-            console.print("[red]No sessions found.[/red]")
-            raise typer.Exit()
-
-        table = Table(title="Available Sessions")
-        table.add_column("#", style="dim")
-        table.add_column("Session ID")
-        table.add_column("Domain")
-        table.add_column("Round")
-        table.add_column("Cases")
-        table.add_column("Endorsement Version")
-        for i, s in enumerate(sessions, 1):
-            table.add_row(
-                str(i), s["id"], s["domain"],
-                str(s["round"]), str(s["cases"]), f"v{s['endorsement_version']}"
-            )
-        console.print(table)
-
-        choice = Prompt.ask("Select session number")
-        session_id = sessions[int(choice) - 1]["id"]
-
-    state = session_mgr.load(session_id)
-    agents = _build_agents(config)
-
-    console.print(f"\n[bold]Resuming session:[/bold] {session_id}")
-    console.print(
-        f"Domain: {state.domain} | Round: {state.current_round} "
-        f"| Endorsement: v{state.current_endorsement.version}"
-    )
-    _display_endorsement(state.current_endorsement)
-
-    _run_adversarial_loop(state, agents, session_mgr, config)
-
-
-@app.command(name="list")
-def list_sessions():
-    """List all sessions."""
-    config = _load_config()
-    session_mgr = SessionManager(config["session_dir"])
-    sessions = session_mgr.list_sessions()
-
-    if not sessions:
-        console.print("[dim]No sessions found.[/dim]")
-        return
-
-    table = Table(title="Sessions")
-    table.add_column("Session ID")
-    table.add_column("Domain")
-    table.add_column("Round")
-    table.add_column("Cases")
-    table.add_column("Endorsement Version")
-    for s in sessions:
-        table.add_row(
-            s["id"], s["domain"],
-            str(s["round"]), str(s["cases"]), f"v{s['endorsement_version']}"
-        )
-    console.print(table)
-
-
-@app.command()
-def visualize(
-    session_id: str = typer.Argument(None, help="Session ID to visualize"),
-    output: str = typer.Option(None, "--output", "-o", help="Output HTML file path"),
-):
-    """Generate an HTML visualization of a session."""
-    config = _load_config()
-    session_mgr = SessionManager(config["session_dir"])
-
-    if not session_id:
-        sessions = session_mgr.list_sessions()
-        if not sessions:
-            console.print("[red]No sessions found.[/red]")
-            raise typer.Exit()
-
-        table = Table(title="Available Sessions")
-        table.add_column("#", style="dim")
-        table.add_column("Session ID")
-        table.add_column("Domain")
-        table.add_column("Cases")
-        for i, s in enumerate(sessions, 1):
-            table.add_row(str(i), s["id"], s["domain"], str(s["cases"]))
-        console.print(table)
-
-        choice = Prompt.ask("Select session number")
-        session_id = sessions[int(choice) - 1]["id"]
-
-    state = session_mgr.load(session_id)
-
-    from loophole.visualize import generate_html
-    report_path = generate_html(state, output_path=output)
-    console.print(f"[bold green]Report generated:[/bold green] {report_path}")
-
+# ---------------------------------------------------------------------------
+# Typer entry point
+# ---------------------------------------------------------------------------
 
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
-    """Loophole — Adversarial Insurance Endorsement Drafter."""
-    if ctx.invoked_subcommand is None:
-        # Interactive menu
-        console.print(
-            Panel(
-                "[bold]Loophole[/bold]\n"
-                "Adversarial Insurance Endorsement Drafter",
-                border_style="bright_blue",
-                padding=(1, 2),
-            )
-        )
-        console.print("  1. [bold]New session[/bold]")
-        console.print("  2. [bold]Resume session[/bold]")
-        console.print("  3. [bold]List sessions[/bold]")
-        console.print("  4. [bold]Exit[/bold]")
-        console.print()
+    """Loophole -- Adversarial Insurance Endorsement Drafter."""
+    if ctx.invoked_subcommand is not None:
+        return
 
-        choice = Prompt.ask("Select", choices=["1", "2", "3", "4"], default="1")
+    config = _load_config()
+    menu_ctx = MenuContext(config=config)
+
+    while True:
+        _print_banner()
+        _print_selections(menu_ctx)
+        _print_menu()
+
+        choice = Prompt.ask("Select", choices=["1", "2", "3", "4", "5", "6", "7"], default="7")
 
         if choice == "1":
-            ctx.invoke(new, domain=None, policy_file=None, goal=None, guidelines_file=None)
+            _configure_menu(menu_ctx)
         elif choice == "2":
-            ctx.invoke(resume, session_id=None)
+            _select_policy(menu_ctx)
         elif choice == "3":
-            ctx.invoke(list_sessions)
-        else:
+            _select_guidelines(menu_ctx)
+        elif choice == "4":
+            _select_endorsement_template(menu_ctx)
+        elif choice == "5":
+            _start_new_session(menu_ctx)
+        elif choice == "6":
+            _previous_sessions_menu(menu_ctx)
+        elif choice == "7":
             raise typer.Exit()
 
 

@@ -83,63 +83,44 @@ export OLLAMA_API_KEY="your-key-here"
 
 ## Usage
 
-### Start a new session
-
-Interactive mode:
+Launch the interactive menu:
 ```bash
 uv run python -m loophole.main
 ```
 
-Or directly with a policy file and goal:
-```bash
-uv run python -m loophole.main new \
-  --domain cyber \
-  --policy examples/cyber_policy_excerpt.txt \
-  --goal "Add an exclusion for state-sponsored cyber attacks"
+You'll see the main menu:
+
+```
+  1. Configure              LLM settings, loop parameters
+  2. Select policy           Base policy to modify
+  3. Select guidelines       Endorsement drafting guidelines
+  4. Select template         Endorsement format template
+  5. Start new session       Draft and stress-test an endorsement
+  6. Previous sessions       Resume or review past sessions
+  7. Exit
 ```
 
-You'll see the initial endorsement, then the adversarial loop begins. Each round:
+**Typical workflow:**
+1. **Select policy** — choose a base policy from `templates/policies/`
+2. **Select guidelines** (optional) — choose drafting guidelines, or use the built-in defaults
+3. **Select template** (optional) — choose an endorsement format template
+4. **Start new session** — enter your line of business and endorsement goal, then the adversarial loop begins
+
+Each round of testing:
 1. Both adversarial agents attack the current endorsement
 2. The Judge processes each case (auto-resolve or escalate)
 3. You see a summary and choose to continue, view the endorsement, or stop
 
 When a case is escalated, you'll be prompted to make a decision. Your decision becomes a new constraint that the endorsement must respect going forward.
 
-### Resume a session
+### Configuration
 
-Sessions auto-save after every case. Pick up where you left off:
-```bash
-uv run python -m loophole.main resume
-```
-
-### Generate a visualization
-
-After a session (or for any past session), generate an HTML report:
-```bash
-uv run python -m loophole.main visualize
-```
-
-This creates a `report.html` in the session directory with:
-- The endorsement goal and base policy
-- The initial endorsement
-- A timeline of every adversarial case
-- Git-style diffs showing how the endorsement changed after each case
-- The final endorsement
-
-### List sessions
-
-```bash
-uv run python -m loophole.main list
-```
-
-## Configuration
-
-Edit `config.yaml` to tune the system:
+Use the **Configure** menu option to change LLM settings, temperatures, and loop parameters at runtime. You can save changes to `config.yaml` from within the menu.
 
 ```yaml
 model:
-  default: "claude-sonnet-4-20250514"   # Which Claude model to use
-  max_tokens: 4096
+  default: "minimax-m2.7:cloud"
+  max_tokens: 8192
 
 temperatures:
   drafter: 0.4             # Lower = more precise drafting
@@ -154,24 +135,31 @@ loop:
 session_dir: "sessions"
 ```
 
+## Templates
+
+Templates are organized in `templates/` with three subdirectories:
+
+- **`templates/policies/`** — Base insurance policy documents. Add your own `.txt` or `.md` files here.
+- **`templates/guidelines/`** — Endorsement drafting guidelines that define quality standards (burden of proof, surgical precision, contra proferentem, etc.). A default set is provided.
+- **`templates/endorsements/`** — Structural format templates for endorsements (preamble, definitions, modifications, etc.). A standard template is provided.
+
 ## Tips for Best Results
 
-- **Pass relevant excerpts, not full policies.** A full cyber policy can be 20-40 pages. The policy text is included in every LLM prompt, so passing the most relevant sections (insuring agreements, definitions, exclusions) produces better results than overwhelming the model with the full document.
+- **Use relevant excerpts, not full policies.** A full cyber policy can be 20-40 pages. The policy text is included in every LLM prompt, so the most relevant sections (insuring agreements, definitions, exclusions) produce better results than the full document.
 - **Be specific with goals.** "Add an exclusion" is too vague. "Add an exclusion for losses arising from state-sponsored cyber attacks while preserving coverage for attacks by non-state criminal actors" gives the drafter clear guardrails.
 - **Engage with escalations.** The cases that reach you are the interesting ones — they reveal genuine tensions in what the endorsement is trying to achieve.
-
-See `examples/cyber_policy_excerpt.txt` for a sample base policy.
 
 ## Project Structure
 
 ```
 loophole/
-  main.py              CLI and main adversarial loop
+  main.py              Interactive menu and adversarial loop
   models.py            Data models (SessionState, Case, Endorsement)
-  llm.py               Anthropic SDK wrapper
+  llm.py               LLM client (Ollama Cloud / OpenAI-compatible)
   prompts.py           All agent prompt templates
   session.py           Session persistence (JSON + markdown)
   visualize.py         HTML report generator
+  template_browser.py  File browser for selecting templates
   agents/
     base.py            Base agent class
     drafter.py         Drafts and revises the endorsement
@@ -179,7 +167,10 @@ loophole/
     overreach_finder.py Finds where endorsement removes intended coverage
     judge.py           Auto-resolves cases or escalates
 
+templates/
+  policies/            Base insurance policy documents
+  guidelines/          Endorsement drafting guidelines
+  endorsements/        Endorsement format templates
 sessions/              One directory per session (auto-created)
-examples/              Example base policies
 config.yaml            Model and loop configuration
 ```

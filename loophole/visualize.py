@@ -132,6 +132,16 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
     gaps = len([c for c in state.cases if c.case_type == CaseType.LOOPHOLE])
     overreaches = len([c for c in state.cases if c.case_type == CaseType.OVERREACH])
 
+    # Optional endorsement template section
+    endorsement_template_html = ""
+    if state.endorsement_template:
+        endorsement_template_html = f"""
+    <div class="goal">
+        <h2>Endorsement Format Template</h2>
+        <p>{html.escape(state.endorsement_template)}</p>
+    </div>
+"""
+
     page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -513,6 +523,8 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
         <h2>Drafting Guidelines</h2>
         <p>{html.escape(state.drafting_guidelines)}</p>
     </div>
+
+    {endorsement_template_html}
 
     <div class="policy">
         <h2>Base Policy</h2>

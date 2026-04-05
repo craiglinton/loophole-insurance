@@ -43,6 +43,7 @@ class SessionState(BaseModel):
     policy_text: str
     endorsement_goal: str
     drafting_guidelines: str
+    endorsement_template: str | None = None
     user_clarifications: list[str] = Field(default_factory=list)
     current_endorsement: Endorsement
     endorsement_history: list[Endorsement] = Field(default_factory=list)

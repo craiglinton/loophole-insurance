@@ -9,7 +9,7 @@ class LLMClient:
     def __init__(
         self,
         model: str = "minimax-m2.7:cloud",
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
     ):
         self.client = OpenAI(
             base_url="https://ollama.com/v1",

@@ -19,6 +19,7 @@ class SessionManager:
         policy_text: str,
         endorsement_goal: str,
         drafting_guidelines: str,
+        endorsement_template: str | None,
         initial_endorsement: Endorsement,
     ) -> SessionState:
         state = SessionState(
@@ -27,6 +28,7 @@ class SessionManager:
             policy_text=policy_text,
             endorsement_goal=endorsement_goal,
             drafting_guidelines=drafting_guidelines,
+            endorsement_template=endorsement_template,
             current_endorsement=initial_endorsement,
             endorsement_history=[initial_endorsement],
         )

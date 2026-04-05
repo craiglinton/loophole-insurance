@@ -43,7 +43,7 @@ ENDORSEMENT GOAL:
 
 BASE POLICY:
 {policy_text}
-
+{endorsement_template_block}
 Produce a thorough, well-structured endorsement that achieves the stated goal \
 while adhering to the drafting guidelines and minimizing unintended impact on \
 other policy provisions."""
@@ -62,7 +62,7 @@ ENDORSEMENT GOAL:
 
 BASE POLICY:
 {policy_text}
-
+{endorsement_template_block}
 ADDITIONAL USER CLARIFICATIONS:
 {user_clarifications}
 

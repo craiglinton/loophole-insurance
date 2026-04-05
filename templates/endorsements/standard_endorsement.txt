@@ -1,0 +1,58 @@
+ENDORSEMENT FORMAT TEMPLATE
+
+This endorsement modifies the insurance provided under:
+
+    Policy Number: [POLICY NUMBER]
+    Named Insured: [NAMED INSURED]
+    Effective Date of Endorsement: [EFFECTIVE DATE]
+    Issued By: [INSURER NAME]
+
+It is agreed that the Policy is amended as follows:
+
+I. PURPOSE
+
+    [Brief statement of the endorsement's purpose]
+
+II. DEFINITIONS
+
+    The following definitions are added to (or replace the corresponding
+    definitions in) the Policy:
+
+    "[TERM]" means [definition].
+
+III. MODIFICATIONS
+
+    A. [Section reference from base policy]
+
+       [Specific modification language — additions, deletions, or
+       replacements to the referenced section]
+
+    B. [Additional section reference if needed]
+
+       [Modification language]
+
+IV. EXCLUSIONS
+
+    [If the endorsement adds exclusions, state them here. If not, omit
+    this section entirely.]
+
+    This Policy does not apply to [EXCLUDED SCENARIO], meaning
+    [clear definition of what is excluded].
+
+V. CONDITIONS
+
+    [Any new conditions or modifications to existing conditions.
+    Omit if not applicable.]
+
+VI. SCOPE AND APPLICABILITY
+
+    A. This endorsement applies to [Claims made / Incidents occurring /
+       both] on or after the Effective Date of Endorsement.
+
+    B. All other terms and conditions of the Policy remain unchanged.
+
+All other terms, conditions, and exclusions of the Policy remain unchanged
+and in full force and effect.
+
+Authorized Representative: ___________________________
+Date: ___________________________
