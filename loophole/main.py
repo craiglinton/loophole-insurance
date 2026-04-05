@@ -22,6 +22,47 @@ from loophole.session import SessionManager
 app = typer.Typer(name="loophole", add_completion=False)
 console = Console()
 
+DEFAULT_DRAFTING_GUIDELINES = """\
+1. Be surgical. The endorsement should modify only what is strictly necessary \
+to achieve its stated goal. Do not rewrite or restructure unrelated policy \
+provisions.
+
+2. Avoid unnecessary complexity. Prefer clear, direct language over elaborate \
+constructions. If a simple sentence achieves the same result as a multi-clause \
+provision, use the simple sentence.
+
+3. Respect the burden of proof framework. The insured bears the burden of \
+demonstrating that a claim falls within an insuring agreement. The carrier \
+bears the burden of demonstrating that an exclusion applies. Draft endorsement \
+language with these burdens in mind.
+
+4. Define terms precisely. If the endorsement introduces a new concept, define \
+it explicitly. If it relies on an existing policy definition, reference it \
+rather than creating a parallel definition that could conflict.
+
+5. Avoid ambiguity that favors one party. Courts generally construe ambiguous \
+policy language against the drafter (contra proferentem). Draft with the \
+assumption that any ambiguity will be resolved in favor of coverage.
+
+6. Preserve the policy's internal consistency. The endorsement should not \
+create contradictions with other policy provisions. Where the endorsement \
+intentionally overrides a base policy provision, state this explicitly.
+
+7. Consider the claims process. Draft language that can be applied by a claims \
+adjuster in practice, not just by a coverage attorney in litigation.
+
+8. Account for regulatory requirements. Endorsement language should not \
+inadvertently violate applicable insurance regulations or create provisions \
+that would be unenforceable in key jurisdictions.
+
+9. Use standard insurance drafting conventions. Follow the structure and \
+conventions of the base policy (e.g., defined terms are capitalized, \
+cross-references use section numbers, effective date is specified).
+
+10. Think about temporal scope. Be explicit about whether the endorsement \
+applies to incidents occurring after the endorsement effective date, claims \
+made after the endorsement effective date, or both."""
+
 
 def _load_config() -> dict:
     config_path = Path("config.yaml")
@@ -271,6 +312,7 @@ def new(
     domain: str = typer.Option(None, help="Line of business (e.g., cyber, D&O, E&O)"),
     policy_file: str = typer.Option(None, "--policy", "-p", help="Path to a text file with the base insurance policy"),
     goal: str = typer.Option(None, "--goal", "-g", help="What the endorsement should accomplish"),
+    guidelines_file: str = typer.Option(None, "--guidelines", help="Path to endorsement drafting guidelines (uses built-in defaults if not provided)"),
 ):
     """Start a new Loophole session."""
     console.print(
@@ -301,6 +343,13 @@ def new(
             "What should this endorsement accomplish? (e.g., add an exclusion for state-sponsored cyber attacks):"
         )
 
+    if guidelines_file:
+        drafting_guidelines = Path(guidelines_file).read_text().strip()
+        console.print(f"[dim]Loaded drafting guidelines from {guidelines_file}[/dim]")
+    else:
+        drafting_guidelines = DEFAULT_DRAFTING_GUIDELINES
+        console.print("[dim]Using default endorsement drafting guidelines[/dim]")
+
     session_id = f"{domain}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     session_mgr = SessionManager(config["session_dir"])
 
@@ -314,11 +363,12 @@ def new(
         domain=domain,
         policy_text=policy_text,
         endorsement_goal=goal,
+        drafting_guidelines=drafting_guidelines,
         current_endorsement=Endorsement(version=0, text=""),
     )
     initial_endorsement = drafter.draft_initial(placeholder)
 
-    state = session_mgr.create_session(session_id, domain, policy_text, goal, initial_endorsement)
+    state = session_mgr.create_session(session_id, domain, policy_text, goal, drafting_guidelines, initial_endorsement)
     _display_endorsement(state.current_endorsement)
 
     if Confirm.ask("Begin adversarial testing?", default=True):
@@ -450,7 +500,7 @@ def main(ctx: typer.Context):
         choice = Prompt.ask("Select", choices=["1", "2", "3", "4"], default="1")
 
         if choice == "1":
-            ctx.invoke(new, domain=None, policy_file=None, goal=None)
+            ctx.invoke(new, domain=None, policy_file=None, goal=None, guidelines_file=None)
         elif choice == "2":
             ctx.invoke(resume, session_id=None)
         elif choice == "3":

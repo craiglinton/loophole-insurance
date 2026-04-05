@@ -27,6 +27,7 @@ class GapFinder(BaseAgent):
 
     def _build_user_message(self, state: SessionState, **kwargs: Any) -> str:
         return GAP_FINDER_USER.format(
+            drafting_guidelines=state.drafting_guidelines,
             policy_text=state.policy_text,
             endorsement_goal=state.endorsement_goal,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",

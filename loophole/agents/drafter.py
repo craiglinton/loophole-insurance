@@ -30,11 +30,13 @@ class EndorsementDrafter(BaseAgent):
         if case is None:
             return DRAFTER_INITIAL.format(
                 domain=state.domain,
+                drafting_guidelines=state.drafting_guidelines,
                 policy_text=state.policy_text,
                 endorsement_goal=state.endorsement_goal,
             )
         return DRAFTER_REVISE.format(
             domain=state.domain,
+            drafting_guidelines=state.drafting_guidelines,
             policy_text=state.policy_text,
             endorsement_goal=state.endorsement_goal,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",

@@ -509,6 +509,11 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
         <p>{html.escape(state.endorsement_goal)}</p>
     </div>
 
+    <div class="goal">
+        <h2>Drafting Guidelines</h2>
+        <p>{html.escape(state.drafting_guidelines)}</p>
+    </div>
+
     <div class="policy">
         <h2>Base Policy</h2>
         <div class="policy-block">{html.escape(state.policy_text)}</div>

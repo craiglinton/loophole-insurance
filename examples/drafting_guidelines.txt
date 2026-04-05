@@ -1,0 +1,21 @@
+ENDORSEMENT DRAFTING GUIDELINES
+
+1. Be surgical. The endorsement should modify only what is strictly necessary to achieve its stated goal. Do not rewrite or restructure unrelated policy provisions.
+
+2. Avoid unnecessary complexity. Prefer clear, direct language over elaborate constructions. If a simple sentence achieves the same result as a multi-clause provision, use the simple sentence.
+
+3. Respect the burden of proof framework. The insured bears the burden of demonstrating that a claim falls within an insuring agreement. The carrier bears the burden of demonstrating that an exclusion applies. Draft endorsement language with these burdens in mind — exclusions should be clear enough that the carrier can meet its burden, and coverage grants should not inadvertently shift the insured's burden.
+
+4. Define terms precisely. If the endorsement introduces a new concept, define it explicitly. If it relies on an existing policy definition, reference it rather than creating a parallel definition that could conflict.
+
+5. Avoid ambiguity that favors one party. Courts generally construe ambiguous policy language against the drafter (contra proferentem). Draft with the assumption that any ambiguity will be resolved in favor of coverage.
+
+6. Preserve the policy's internal consistency. The endorsement should not create contradictions with other policy provisions. Where the endorsement intentionally overrides a base policy provision, state this explicitly.
+
+7. Consider the claims process. Draft language that can be applied by a claims adjuster in practice, not just by a coverage attorney in litigation. Endorsement language that requires extensive legal analysis to apply is poorly drafted.
+
+8. Account for regulatory requirements. Endorsement language should not inadvertently violate applicable insurance regulations or create provisions that would be unenforceable in key jurisdictions.
+
+9. Use standard insurance drafting conventions. Follow the structure and conventions of the base policy (e.g., defined terms are capitalized, cross-references use section numbers, effective date is specified).
+
+10. Think about temporal scope. Be explicit about whether the endorsement applies to incidents occurring after the endorsement effective date, claims made after the endorsement effective date, or both.

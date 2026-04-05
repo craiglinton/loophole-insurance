@@ -7,7 +7,7 @@
 DRAFTER_SYSTEM = """\
 You are an insurance endorsement drafter specializing in commercial insurance. \
 Your job is to draft precise endorsement language that modifies a base insurance \
-policy to achieve a stated goal.
+policy to achieve a stated goal, following the provided drafting guidelines.
 
 The endorsement should:
 - Begin with a preamble identifying the policy being modified
@@ -20,6 +20,10 @@ provided under the above-numbered policy.")
 - Use clear, unambiguous insurance language
 - Be as narrow as possible — modify only what is needed to achieve the goal
 
+You must adhere to the ENDORSEMENT DRAFTING GUIDELINES provided. These \
+guidelines are your primary quality standard — they define what "good" \
+endorsement drafting looks like.
+
 Write ONLY the endorsement text. Do not add commentary or explanation outside \
 the endorsement itself.
 
@@ -31,6 +35,9 @@ the stated goal.
 
 Line of Business: {domain}
 
+ENDORSEMENT DRAFTING GUIDELINES:
+{drafting_guidelines}
+
 ENDORSEMENT GOAL:
 {endorsement_goal}
 
@@ -38,13 +45,17 @@ BASE POLICY:
 {policy_text}
 
 Produce a thorough, well-structured endorsement that achieves the stated goal \
-while minimizing unintended impact on other policy provisions."""
+while adhering to the drafting guidelines and minimizing unintended impact on \
+other policy provisions."""
 
 DRAFTER_REVISE = """\
 You must revise the current endorsement to address a new case while remaining \
 consistent with ALL previously resolved cases.
 
 Line of Business: {domain}
+
+ENDORSEMENT DRAFTING GUIDELINES:
+{drafting_guidelines}
 
 ENDORSEMENT GOAL:
 {endorsement_goal}
@@ -70,7 +81,7 @@ still handle all of them correctly):
 
 Revise the endorsement to incorporate the resolution of the new case. Make \
 minimal changes — do not rewrite sections that don't need changing. Preserve \
-the structure and numbering where possible.
+the structure and numbering where possible. Adhere to the drafting guidelines.
 
 After the endorsement, provide a brief changelog.
 
@@ -92,12 +103,17 @@ Your goal is to find GAPS in an endorsement — scenarios where the endorsement 
 fails to achieve its stated goal, creates unintended coverage holes, or \
 contains exploitable ambiguity.
 
+You will be provided with endorsement drafting guidelines that define what \
+"good" endorsement drafting looks like. Violations of these guidelines are \
+themselves a form of gap — poorly drafted language creates exploitable \
+weaknesses.
+
 Think like a policyholder's coverage attorney looking for ways to argue \
 around the endorsement. Consider:
 - Literal readings where the endorsement technically doesn't apply to \
 scenarios it was meant to cover
 - Ambiguous terms or definitions that could be interpreted favorably by a \
-claimant
+claimant (remember: courts construe ambiguity against the drafter)
 - Edge cases at the boundaries of definitions (e.g., if excluding \
 "state-sponsored" attacks — what about state-affiliated? state-tolerated?)
 - Interactions between the endorsement and base policy language that create \
@@ -107,6 +123,9 @@ doesn't due to drafting gaps
 - Ways a policyholder could structure a claim to fall outside the endorsement's \
 scope
 - Temporal or jurisdictional gaps
+- Places where the endorsement violates the drafting guidelines (e.g., \
+unnecessary complexity, shifted burden of proof, ambiguity that will be \
+construed against the drafter)
 
 For each gap, provide a CONCRETE, SPECIFIC scenario — not an abstract \
 observation. Describe a claim situation with enough detail that an underwriter \
@@ -119,12 +138,15 @@ Return exactly {cases_per_agent} scenarios, each wrapped in tags:
 <scenario>
 <description>[A concrete claim scenario with enough detail to evaluate]</description>
 <explanation>[Why this scenario falls through a gap in the endorsement AND \
-why it undermines the endorsement's stated goal. Cite specific endorsement \
-language or base policy sections.]</explanation>
+why it undermines the endorsement's stated goal or violates the drafting \
+guidelines. Cite specific endorsement language or base policy sections.]</explanation>
 </scenario>"""
 
 GAP_FINDER_USER = """\
 Find gaps in the following endorsement.
+
+ENDORSEMENT DRAFTING GUIDELINES:
+{drafting_guidelines}
 
 ENDORSEMENT GOAL:
 {endorsement_goal}
@@ -142,7 +164,8 @@ PREVIOUSLY FOUND CASES (do NOT repeat these or find closely similar scenarios):
 {prior_cases_text}
 
 Find {cases_per_agent} NEW gaps — scenarios where the endorsement fails to \
-achieve its stated goal or creates unintended coverage issues."""
+achieve its stated goal, violates the drafting guidelines, or creates \
+unintended coverage issues."""
 
 # ---------------------------------------------------------------------------
 # Overreach Finder (Adversarial Agent B)
@@ -153,6 +176,10 @@ You are an adversarial red-teamer analyzing insurance endorsement language. \
 Your goal is to find OVERREACH in an endorsement — scenarios where the \
 endorsement inadvertently removes or limits coverage that the insurer \
 intends to keep, or catches legitimate claims it shouldn't.
+
+You will be provided with endorsement drafting guidelines that define what \
+"good" endorsement drafting looks like. The guidelines emphasize surgical \
+precision — overreach is the failure to be surgical.
 
 Think about:
 - Legitimate claims that should still be covered but are accidentally \
@@ -166,6 +193,9 @@ or uncompetitive
 requirements or standard market practice
 - Good-faith claims that any reasonable underwriter would pay but that the \
 endorsement technically bars
+- Places where the endorsement violates the drafting guidelines (e.g., \
+modifying more than necessary, introducing unnecessary complexity, creating \
+provisions that are impractical for claims adjusters to apply)
 
 For each case of overreach, provide a CONCRETE, SPECIFIC scenario — not an \
 abstract observation. Describe a claim situation with enough detail that an \
@@ -179,11 +209,14 @@ Return exactly {cases_per_agent} scenarios, each wrapped in tags:
 <description>[A concrete claim scenario with enough detail to evaluate]</description>
 <explanation>[Why this legitimate claim is inadvertently blocked or limited \
 by the endorsement AND why coverage should apply. Cite specific endorsement \
-language or base policy sections.]</explanation>
+language, base policy sections, or drafting guideline violations.]</explanation>
 </scenario>"""
 
 OVERREACH_FINDER_USER = """\
 Find overreach in the following endorsement.
+
+ENDORSEMENT DRAFTING GUIDELINES:
+{drafting_guidelines}
 
 ENDORSEMENT GOAL:
 {endorsement_goal}
@@ -201,7 +234,8 @@ PREVIOUSLY FOUND CASES (do NOT repeat these or find closely similar scenarios):
 {prior_cases_text}
 
 Find {cases_per_agent} NEW cases of overreach — scenarios where the \
-endorsement inadvertently blocks or limits legitimate coverage."""
+endorsement inadvertently blocks or limits legitimate coverage, or violates \
+the drafting guidelines by being broader than necessary."""
 
 # ---------------------------------------------------------------------------
 # Judge
@@ -213,11 +247,15 @@ presented with a case where the endorsement has failed (either a gap or \
 overreach), you must determine whether the endorsement can be revised to fix \
 the problem WITHOUT contradicting any previously resolved cases.
 
+You will be provided with endorsement drafting guidelines. Any proposed \
+revision must adhere to these guidelines.
+
 You have two possible verdicts:
 
 1. RESOLVABLE — You can propose a specific, minimal revision to the \
 endorsement that addresses the new case while remaining consistent with all \
-prior resolved cases. The revision should be principled, not a hacky exception.
+prior resolved cases and the drafting guidelines. The revision should be \
+principled, not a hacky exception.
 
 2. UNRESOLVABLE — Any revision you can think of to fix this case would \
 contradict at least one previously resolved case, OR the case reveals a \
@@ -230,6 +268,9 @@ maintains consistency. When in doubt, escalate."""
 
 JUDGE_RESOLVE = """\
 Evaluate this case and attempt to resolve it.
+
+ENDORSEMENT DRAFTING GUIDELINES:
+{drafting_guidelines}
 
 ENDORSEMENT GOAL:
 {endorsement_goal}
@@ -253,7 +294,8 @@ every one of these):
 {resolved_cases_text}
 
 First, reason carefully about whether this case can be fixed without breaking \
-any prior case. Then provide your verdict.
+any prior case and while adhering to the drafting guidelines. Then provide \
+your verdict.
 
 <reasoning>
 [Your analysis of the case and whether/how it can be resolved]
