@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 
 
 class CaseType(str, Enum):
-    LOOPHOLE = "loophole"  # Legal but immoral
-    OVERREACH = "overreach"  # Illegal but moral
+    LOOPHOLE = "loophole"  # Gap: endorsement fails to achieve goal or can be exploited
+    OVERREACH = "overreach"  # Overreach: endorsement removes coverage insurer intends to keep
 
 
 class CaseStatus(str, Enum):
@@ -30,7 +30,7 @@ class Case(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
 
 
-class LegalCode(BaseModel):
+class Endorsement(BaseModel):
     version: int
     text: str
     changelog: str | None = None
@@ -40,10 +40,11 @@ class LegalCode(BaseModel):
 class SessionState(BaseModel):
     session_id: str
     domain: str
-    moral_principles: str
+    policy_text: str
+    endorsement_goal: str
     user_clarifications: list[str] = Field(default_factory=list)
-    current_code: LegalCode
-    code_history: list[LegalCode] = Field(default_factory=list)
+    current_endorsement: Endorsement
+    endorsement_history: list[Endorsement] = Field(default_factory=list)
     cases: list[Case] = Field(default_factory=list)
     current_round: int = 0
     created_at: datetime = Field(default_factory=datetime.now)
@@ -59,3 +60,4 @@ class SessionState(BaseModel):
     @property
     def next_case_id(self) -> int:
         return len(self.cases) + 1
+

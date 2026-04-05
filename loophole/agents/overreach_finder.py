@@ -27,10 +27,11 @@ class OverreachFinder(BaseAgent):
 
     def _build_user_message(self, state: SessionState, **kwargs: Any) -> str:
         return OVERREACH_FINDER_USER.format(
-            moral_principles=state.moral_principles,
+            policy_text=state.policy_text,
+            endorsement_goal=state.endorsement_goal,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",
-            code_version=state.current_code.version,
-            legal_code=state.current_code.text,
+            endorsement_version=state.current_endorsement.version,
+            endorsement_text=state.current_endorsement.text,
             prior_cases_text=_format_prior_cases(state.cases),
             cases_per_agent=self.cases_per_agent,
         )

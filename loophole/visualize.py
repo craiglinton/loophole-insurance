@@ -6,7 +6,7 @@ import difflib
 import html
 from pathlib import Path
 
-from loophole.models import CaseStatus, CaseType, LegalCode, SessionState
+from loophole.models import CaseStatus, CaseType, Endorsement, SessionState
 
 
 def _compute_diff_html(before: str, after: str) -> str:
@@ -38,23 +38,23 @@ def _compute_diff_html(before: str, after: str) -> str:
 
 
 def _build_version_map(state: SessionState) -> dict[int, int]:
-    """Map each resolved case's position in state.cases → the code_history index
+    """Map each resolved case's position in state.cases → the endorsement_history index
     of the version it produced.
 
     We use position in state.cases (not case.id) as the key because case IDs
-    can collide across types (e.g., loophole #1 and overreach #1).
+    can collide across types (e.g., gap #1 and overreach #1).
 
-    In the main loop, each resolved case triggers legislator.revise(), which
-    appends a new LegalCode to code_history.  code_history[0] is the initial
-    draft (v1).  The i-th resolved case (in processing order) produced
-    code_history[i+1] if it exists.
+    In the main loop, each resolved case triggers drafter.revise(), which
+    appends a new Endorsement to endorsement_history.  endorsement_history[0]
+    is the initial draft (v1).  The i-th resolved case (in processing order)
+    produced endorsement_history[i+1] if it exists.
     """
     mapping: dict[int, int] = {}
     resolved_idx = 0
     for cases_idx, case in enumerate(state.cases):
         if case.status in (CaseStatus.AUTO_RESOLVED, CaseStatus.USER_RESOLVED):
             history_idx = resolved_idx + 1  # +1 because [0] is initial
-            if history_idx < len(state.code_history):
+            if history_idx < len(state.endorsement_history):
                 mapping[cases_idx] = history_idx
             resolved_idx += 1
     return mapping
@@ -68,27 +68,27 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
         if case.status not in (CaseStatus.AUTO_RESOLVED, CaseStatus.USER_RESOLVED):
             continue
 
-        # Get before/after code for diff
+        # Get before/after endorsement for diff
         history_idx = case_to_history.get(cases_idx)
-        before_code = None
-        after_code = None
-        if history_idx and history_idx < len(state.code_history):
-            before_code = state.code_history[history_idx - 1]
-            after_code = state.code_history[history_idx]
+        before_endorsement = None
+        after_endorsement = None
+        if history_idx and history_idx < len(state.endorsement_history):
+            before_endorsement = state.endorsement_history[history_idx - 1]
+            after_endorsement = state.endorsement_history[history_idx]
 
-        case_type_label = "LOOPHOLE" if case.case_type == CaseType.LOOPHOLE else "OVERREACH"
-        case_type_desc = "Legal but Immoral" if case.case_type == CaseType.LOOPHOLE else "Illegal but Moral"
+        case_type_label = "GAP" if case.case_type == CaseType.LOOPHOLE else "OVERREACH"
+        case_type_desc = "Gap in Endorsement" if case.case_type == CaseType.LOOPHOLE else "Endorsement Overreach"
         color = "#ef4444" if case.case_type == CaseType.LOOPHOLE else "#eab308"
         attack_bg = "#1c1012" if case.case_type == CaseType.LOOPHOLE else "#1c1a0e"
         resolved_by = "Judge (auto)" if case.resolved_by == "judge" else "Human (escalated)"
         resolved_badge_color = "#10b981" if case.resolved_by == "judge" else "#8b5cf6"
 
         diff_section = ""
-        if before_code and after_code:
-            diff_html = _compute_diff_html(before_code.text, after_code.text)
+        if before_endorsement and after_endorsement:
+            diff_html = _compute_diff_html(before_endorsement.text, after_endorsement.text)
             diff_section = f"""
             <div class="section">
-                <div class="section-label">Code Diff (v{before_code.version} &rarr; v{after_code.version})</div>
+                <div class="section-label">Endorsement Diff (v{before_endorsement.version} &rarr; v{after_endorsement.version})</div>
                 <div class="diff-box">
                     {diff_html}
                 </div>
@@ -129,7 +129,7 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
 
     # Stats
     total = len(state.cases)
-    loopholes = len([c for c in state.cases if c.case_type == CaseType.LOOPHOLE])
+    gaps = len([c for c in state.cases if c.case_type == CaseType.LOOPHOLE])
     overreaches = len([c for c in state.cases if c.case_type == CaseType.OVERREACH])
 
     page = f"""<!DOCTYPE html>
@@ -210,43 +210,73 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
         margin-top: 4px;
     }}
 
-    /* ---- Principles ---- */
-    .principles {{
+    /* ---- Goal ---- */
+    .goal {{
         background: #141414;
         border: 1px solid #262626;
         border-radius: 12px;
         padding: 24px;
-        margin-bottom: 48px;
+        margin-bottom: 24px;
     }}
-    .principles h2 {{
+    .goal h2 {{
         font-size: 14px;
         text-transform: uppercase;
         letter-spacing: 1px;
         color: #737373;
         margin-bottom: 12px;
     }}
-    .principles p {{
+    .goal p {{
         color: #d4d4d4;
         white-space: pre-wrap;
         font-size: 14px;
     }}
 
-    /* ---- Initial code ---- */
-    .initial-code {{
+    /* ---- Policy ---- */
+    .policy {{
         background: #141414;
         border: 1px solid #262626;
         border-radius: 12px;
         padding: 24px;
         margin-bottom: 48px;
     }}
-    .initial-code h2 {{
+    .policy h2 {{
         font-size: 14px;
         text-transform: uppercase;
         letter-spacing: 1px;
         color: #737373;
         margin-bottom: 12px;
     }}
-    .initial-code-block {{
+    .policy-block {{
+        background: #0d1117;
+        border: 1px solid #21262d;
+        border-radius: 8px;
+        padding: 16px;
+        font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+        font-size: 12px;
+        line-height: 1.6;
+        color: #c9d1d9;
+        white-space: pre-wrap;
+        overflow-x: auto;
+        max-height: 400px;
+        overflow-y: auto;
+    }}
+
+    /* ---- Initial endorsement ---- */
+    .initial-endorsement {{
+        background: #141414;
+        border: 1px solid #262626;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 48px;
+    }}
+    .initial-endorsement h2 {{
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #737373;
+        margin-bottom: 12px;
+    }}
+    .initial-endorsement-block {{
         background: #0d1117;
         border: 1px solid #21262d;
         border-radius: 8px;
@@ -411,21 +441,21 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
         color: #8b949e;
     }}
 
-    /* ---- Final code ---- */
-    .final-code {{
+    /* ---- Final endorsement ---- */
+    .final-endorsement {{
         background: #141414;
         border: 1px solid #262626;
         border-radius: 12px;
         padding: 24px;
         margin-top: 48px;
     }}
-    .final-code h2 {{
+    .final-endorsement h2 {{
         font-size: 20px;
         font-weight: 600;
         margin-bottom: 16px;
         color: #10b981;
     }}
-    .final-code-block {{
+    .final-endorsement-block {{
         background: #0d1117;
         border: 1px solid #21262d;
         border-radius: 8px;
@@ -451,7 +481,7 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
 <div class="container">
     <div class="header">
         <h1>Loophole</h1>
-        <div class="subtitle">Adversarial Moral-Legal Code System</div>
+        <div class="subtitle">Adversarial Insurance Endorsement Drafter</div>
         <div class="domain-badge">{html.escape(state.domain)}</div>
     </div>
 
@@ -465,8 +495,8 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
             <div class="stat-label">Cases</div>
         </div>
         <div class="stat">
-            <div class="stat-value" style="color: #ef4444;">{loopholes}</div>
-            <div class="stat-label">Loopholes</div>
+            <div class="stat-value" style="color: #ef4444;">{gaps}</div>
+            <div class="stat-label">Gaps</div>
         </div>
         <div class="stat">
             <div class="stat-value" style="color: #eab308;">{overreaches}</div>
@@ -474,27 +504,32 @@ def generate_html(state: SessionState, output_path: str | None = None) -> str:
         </div>
     </div>
 
-    <div class="principles">
-        <h2>Moral Principles</h2>
-        <p>{html.escape(state.moral_principles)}</p>
+    <div class="goal">
+        <h2>Endorsement Goal</h2>
+        <p>{html.escape(state.endorsement_goal)}</p>
     </div>
 
-    <div class="initial-code">
-        <h2>Initial Legal Code (v1)</h2>
-        <div class="initial-code-block">{html.escape(state.code_history[0].text if state.code_history else state.current_code.text)}</div>
+    <div class="policy">
+        <h2>Base Policy</h2>
+        <div class="policy-block">{html.escape(state.policy_text)}</div>
+    </div>
+
+    <div class="initial-endorsement">
+        <h2>Initial Endorsement (v1)</h2>
+        <div class="initial-endorsement-block">{html.escape(state.endorsement_history[0].text if state.endorsement_history else state.current_endorsement.text)}</div>
     </div>
 
     <div class="timeline">
         {"".join(cases_html)}
     </div>
 
-    <div class="final-code">
-        <h2>Final Legal Code (v{state.current_code.version})</h2>
-        <div class="final-code-block">{html.escape(state.current_code.text)}</div>
+    <div class="final-endorsement">
+        <h2>Final Endorsement (v{state.current_endorsement.version})</h2>
+        <div class="final-endorsement-block">{html.escape(state.current_endorsement.text)}</div>
     </div>
 
     <div class="footer">
-        Generated by <strong>Loophole</strong> &mdash; {state.current_round} rounds, {total} adversarial cases, code v{state.current_code.version}
+        Generated by <strong>Loophole</strong> &mdash; {state.current_round} rounds, {total} adversarial cases, endorsement v{state.current_endorsement.version}
     </div>
 </div>
 </body>

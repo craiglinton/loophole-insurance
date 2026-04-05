@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from loophole.models import Case, CaseStatus, LegalCode, SessionState
+from loophole.models import Case, CaseStatus, Endorsement, SessionState
 
 
 class SessionManager:
@@ -12,13 +12,21 @@ class SessionManager:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def create_session(self, session_id: str, domain: str, principles: str, initial_code: LegalCode) -> SessionState:
+    def create_session(
+        self,
+        session_id: str,
+        domain: str,
+        policy_text: str,
+        endorsement_goal: str,
+        initial_endorsement: Endorsement,
+    ) -> SessionState:
         state = SessionState(
             session_id=session_id,
             domain=domain,
-            moral_principles=principles,
-            current_code=initial_code,
-            code_history=[initial_code],
+            policy_text=policy_text,
+            endorsement_goal=endorsement_goal,
+            current_endorsement=initial_endorsement,
+            endorsement_history=[initial_endorsement],
         )
         self.save(state)
         return state
@@ -32,11 +40,12 @@ class SessionManager:
             state.model_dump_json(indent=2)
         )
 
-        # Human-readable legal code
-        (session_dir / "current_code.md").write_text(
-            f"# Legal Code v{state.current_code.version}\n\n"
-            f"*Domain: {state.domain}*\n\n"
-            f"{state.current_code.text}\n"
+        # Human-readable endorsement
+        (session_dir / "current_endorsement.md").write_text(
+            f"# Endorsement v{state.current_endorsement.version}\n\n"
+            f"*Line of Business: {state.domain}*\n\n"
+            f"*Goal: {state.endorsement_goal}*\n\n"
+            f"{state.current_endorsement.text}\n"
         )
 
         # Human-readable case log
@@ -59,7 +68,7 @@ class SessionManager:
                     "domain": data["domain"],
                     "round": data["current_round"],
                     "cases": len(data["cases"]),
-                    "code_version": data["current_code"]["version"],
+                    "endorsement_version": data["current_endorsement"]["version"],
                 })
         return sessions
 
@@ -67,7 +76,8 @@ class SessionManager:
 def _render_case_log(state: SessionState) -> str:
     lines = [
         f"# Case Log — {state.domain}",
-        f"*Session: {state.session_id}*\n",
+        f"*Session: {state.session_id}*",
+        f"*Goal: {state.endorsement_goal}*\n",
     ]
 
     status_labels = {

@@ -1,24 +1,29 @@
 from __future__ import annotations
 
-import anthropic
+import os
+
+from openai import OpenAI
 
 
 class LLMClient:
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "minimax-m2.7:cloud",
         max_tokens: int = 4096,
     ):
-        self.client = anthropic.Anthropic()
+        self.client = OpenAI(
+            base_url="https://ollama.com/v1",
+            api_key=os.environ.get("OLLAMA_API_KEY", ""),
+        )
         self.model = model
         self.max_tokens = max_tokens
 
     def call(self, system: str, user_message: str, temperature: float = 0.5) -> str:
-        response = self.client.messages.create(
+        response = self.client.responses.create(
             model=self.model,
-            max_tokens=self.max_tokens,
+            instructions=system,
+            input=user_message,
             temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": user_message}],
+            max_output_tokens=self.max_tokens,
         )
-        return response.content[0].text
+        return response.output_text

@@ -46,10 +46,11 @@ class Judge(BaseAgent):
     def _build_user_message(self, state: SessionState, **kwargs: Any) -> str:
         case: Case = kwargs["case"]
         return JUDGE_RESOLVE.format(
-            moral_principles=state.moral_principles,
+            policy_text=state.policy_text,
+            endorsement_goal=state.endorsement_goal,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",
-            code_version=state.current_code.version,
-            legal_code=state.current_code.text,
+            endorsement_version=state.current_endorsement.version,
+            endorsement_text=state.current_endorsement.text,
             case_type=case.case_type.value,
             case_scenario=case.scenario,
             case_explanation=case.explanation,
@@ -77,13 +78,13 @@ class Judge(BaseAgent):
             conflict_explanation=_extract_tag(raw, "conflict_explanation"),
         )
 
-    def validate(self, state: SessionState, proposed_code: str) -> ValidationResult:
+    def validate(self, state: SessionState, proposed_endorsement: str) -> ValidationResult:
         resolved = state.resolved_cases
         if not resolved:
             return ValidationResult(passes=True, details="No prior cases to validate against.")
 
         user_msg = JUDGE_VALIDATE.format(
-            proposed_code=proposed_code,
+            proposed_endorsement=proposed_endorsement,
             resolved_cases_text=_format_resolved_cases(resolved),
         )
         raw = self.llm.call(JUDGE_SYSTEM, user_msg, temperature=self.temperature)

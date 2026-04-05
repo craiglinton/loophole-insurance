@@ -4,8 +4,8 @@ import re
 from typing import Any
 
 from loophole.agents.base import BaseAgent
-from loophole.models import Case, LegalCode, SessionState
-from loophole.prompts import LEGISLATOR_INITIAL, LEGISLATOR_REVISE, LEGISLATOR_SYSTEM
+from loophole.models import Case, Endorsement, SessionState
+from loophole.prompts import DRAFTER_INITIAL, DRAFTER_REVISE, DRAFTER_SYSTEM
 
 
 def _format_resolved_cases(cases: list[Case]) -> str:
@@ -21,23 +21,25 @@ def _format_resolved_cases(cases: list[Case]) -> str:
     return "\n\n".join(parts)
 
 
-class Legislator(BaseAgent):
+class EndorsementDrafter(BaseAgent):
     def _build_system_prompt(self, **kwargs: Any) -> str:
-        return LEGISLATOR_SYSTEM
+        return DRAFTER_SYSTEM
 
     def _build_user_message(self, state: SessionState, **kwargs: Any) -> str:
         case: Case | None = kwargs.get("case")
         if case is None:
-            return LEGISLATOR_INITIAL.format(
+            return DRAFTER_INITIAL.format(
                 domain=state.domain,
-                moral_principles=state.moral_principles,
+                policy_text=state.policy_text,
+                endorsement_goal=state.endorsement_goal,
             )
-        return LEGISLATOR_REVISE.format(
+        return DRAFTER_REVISE.format(
             domain=state.domain,
-            moral_principles=state.moral_principles,
+            policy_text=state.policy_text,
+            endorsement_goal=state.endorsement_goal,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",
-            code_version=state.current_code.version,
-            legal_code=state.current_code.text,
+            endorsement_version=state.current_endorsement.version,
+            endorsement_text=state.current_endorsement.text,
             case_type=case.case_type.value,
             case_scenario=case.scenario,
             case_explanation=case.explanation,
@@ -45,17 +47,17 @@ class Legislator(BaseAgent):
             resolved_cases_text=_format_resolved_cases(state.resolved_cases),
         )
 
-    def draft_initial(self, state: SessionState) -> LegalCode:
+    def draft_initial(self, state: SessionState) -> Endorsement:
         raw = self.run(state)
-        text = _extract_tag(raw, "legal_code") or raw
-        return LegalCode(version=1, text=text.strip())
+        text = _extract_tag(raw, "endorsement") or raw
+        return Endorsement(version=1, text=text.strip())
 
-    def revise(self, state: SessionState, case: Case) -> LegalCode:
+    def revise(self, state: SessionState, case: Case) -> Endorsement:
         raw = self.run(state, case=case)
-        text = _extract_tag(raw, "legal_code") or raw
+        text = _extract_tag(raw, "endorsement") or raw
         changelog = _extract_tag(raw, "changelog")
-        return LegalCode(
-            version=state.current_code.version + 1,
+        return Endorsement(
+            version=state.current_endorsement.version + 1,
             text=text.strip(),
             changelog=changelog,
         )

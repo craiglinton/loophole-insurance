@@ -5,7 +5,7 @@ from typing import Any
 
 from loophole.agents.base import BaseAgent
 from loophole.models import Case, CaseType, SessionState
-from loophole.prompts import LOOPHOLE_FINDER_SYSTEM, LOOPHOLE_FINDER_USER
+from loophole.prompts import GAP_FINDER_SYSTEM, GAP_FINDER_USER
 
 
 def _format_prior_cases(cases: list[Case]) -> str:
@@ -17,20 +17,21 @@ def _format_prior_cases(cases: list[Case]) -> str:
     return "\n".join(parts)
 
 
-class LoopholeFinder(BaseAgent):
+class GapFinder(BaseAgent):
     def __init__(self, *args: Any, cases_per_agent: int = 3, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self.cases_per_agent = cases_per_agent
 
     def _build_system_prompt(self, **kwargs: Any) -> str:
-        return LOOPHOLE_FINDER_SYSTEM.format(cases_per_agent=self.cases_per_agent)
+        return GAP_FINDER_SYSTEM.format(cases_per_agent=self.cases_per_agent)
 
     def _build_user_message(self, state: SessionState, **kwargs: Any) -> str:
-        return LOOPHOLE_FINDER_USER.format(
-            moral_principles=state.moral_principles,
+        return GAP_FINDER_USER.format(
+            policy_text=state.policy_text,
+            endorsement_goal=state.endorsement_goal,
             user_clarifications="\n".join(state.user_clarifications) or "(none)",
-            code_version=state.current_code.version,
-            legal_code=state.current_code.text,
+            endorsement_version=state.current_endorsement.version,
+            endorsement_text=state.current_endorsement.text,
             prior_cases_text=_format_prior_cases(state.cases),
             cases_per_agent=self.cases_per_agent,
         )

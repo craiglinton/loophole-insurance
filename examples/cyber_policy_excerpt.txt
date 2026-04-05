@@ -1,0 +1,97 @@
+CYBER LIABILITY INSURANCE POLICY
+Policy Number: CYB-2026-SAMPLE
+Effective Date: [DATE]
+
+SECTION I — INSURING AGREEMENTS
+
+A. Data Breach Response Coverage
+The Insurer will pay on behalf of the Insured the Data Breach Response Costs arising from a Security Incident first discovered by the Insured during the Policy Period.
+
+B. Network Security Liability Coverage
+The Insurer will pay on behalf of the Insured those Loss amounts that the Insured becomes legally obligated to pay as a result of any Claim first made against the Insured during the Policy Period arising from a Network Security Failure.
+
+C. Privacy Liability Coverage
+The Insurer will pay on behalf of the Insured those Loss amounts that the Insured becomes legally obligated to pay as a result of any Claim first made against the Insured during the Policy Period arising from a Privacy Violation.
+
+D. Business Interruption Coverage
+The Insurer will pay the Insured for Business Interruption Loss resulting from a material interruption or suspension of the Insured's Computer Systems caused by a Security Incident first discovered during the Policy Period, subject to the Waiting Period.
+
+E. Cyber Extortion Coverage
+The Insurer will pay on behalf of the Insured the Cyber Extortion Loss resulting from a Cyber Extortion Threat first discovered by the Insured during the Policy Period.
+
+F. Media Liability Coverage
+The Insurer will pay on behalf of the Insured those Loss amounts that the Insured becomes legally obligated to pay as a result of any Claim first made against the Insured during the Policy Period arising from a Media Wrongful Act in Digital Content published by the Insured.
+
+SECTION II — DEFINITIONS
+
+"Claim" means a written demand for monetary damages, a civil proceeding, or a regulatory proceeding against the Insured.
+
+"Computer Systems" means the computer hardware, software, firmware, and associated equipment, including networks and data storage devices, owned or operated by, or operated on behalf of, the Insured.
+
+"Cyber Extortion Loss" means (a) any ransom or payment made by the Insured to a party making a Cyber Extortion Threat, with the Insurer's prior written consent; and (b) costs reasonably incurred by the Insured, with the Insurer's prior written consent, to respond to or mitigate a Cyber Extortion Threat.
+
+"Cyber Extortion Threat" means a credible threat or series of related threats made against the Insured to (a) introduce malicious code into the Insured's Computer Systems, (b) corrupt, damage, or destroy the Insured's data, (c) restrict or hinder access to the Insured's Computer Systems, or (d) publicly disclose data held by the Insured, unless the Insured makes a payment or performs an action.
+
+"Data Breach Response Costs" means reasonable and necessary costs incurred by the Insured, with the Insurer's prior written consent, to respond to a Security Incident, including: (a) forensic investigation costs; (b) notification costs required by applicable Privacy Regulations; (c) credit monitoring and identity theft protection services; (d) public relations and crisis management costs; and (e) legal costs for regulatory advice.
+
+"Digital Content" means content in electronic form published by or on behalf of the Insured on the Insured's website, social media accounts, or other digital platforms.
+
+"Loss" means compensatory damages, judgments, settlements, and Defense Costs. Loss does not include: (a) criminal or civil fines or penalties; (b) the multiplied portion of any multiplied damages award; (c) taxes; (d) costs to comply with injunctive or non-monetary relief; or (e) matters uninsurable under applicable law.
+
+"Media Wrongful Act" means defamation, libel, slander, invasion of privacy, infringement of copyright or trademark, or misappropriation of ideas, in or arising from Digital Content.
+
+"Network Security Failure" means (a) unauthorized access to or use of the Insured's Computer Systems; (b) a denial-of-service attack against the Insured's Computer Systems; (c) infection of the Insured's Computer Systems by malicious code; or (d) transmission of malicious code from the Insured's Computer Systems to a third party's computer systems.
+
+"Privacy Regulations" means any federal, state, local, or foreign statute or regulation that requires an entity to provide notice to individuals, regulators, or other parties in the event of unauthorized access to or disclosure of Personal Information.
+
+"Privacy Violation" means (a) the failure to protect Personal Information in the care, custody, or control of the Insured; or (b) a violation of any Privacy Regulations by the Insured.
+
+"Personal Information" means any information concerning a natural person that, alone or in combination, can be used to identify, contact, or locate that person, including but not limited to: name, Social Security number, driver's license number, financial account numbers, medical information, or biometric data.
+
+"Security Incident" means (a) unauthorized access to, or unauthorized use of, the Insured's Computer Systems; (b) introduction of malicious code into the Insured's Computer Systems; or (c) a denial-of-service attack against the Insured's Computer Systems.
+
+"Waiting Period" means the number of consecutive hours specified in the Declarations that must elapse after the Insured first discovers a Security Incident before Business Interruption Coverage applies.
+
+SECTION III — EXCLUSIONS
+
+This Policy does not apply to any Claim, Loss, or costs arising out of or in connection with:
+
+A. Bodily Injury / Property Damage — bodily injury, sickness, disease, death, or physical damage to or destruction of tangible property.
+
+B. Prior Knowledge — any fact or circumstance that the Insured knew or reasonably should have known prior to the inception of this Policy could give rise to a Claim.
+
+C. Intentional Acts — any dishonest, fraudulent, criminal, or intentionally malicious act by an Insured. This exclusion does not apply until a final adjudication, judgment, or admission establishes such conduct.
+
+D. Contractual Liability — any assumed liability under a contract or agreement, except to the extent the Insured would have been liable in the absence of such contract or agreement.
+
+E. Infrastructure Failure — any failure of electrical power, telecommunications, internet service, or other utility or infrastructure not owned, operated, or controlled by the Insured, unless such failure is directly caused by a Security Incident.
+
+F. War — war, invasion, act of foreign enemy, hostilities (whether war is declared or not), civil war, rebellion, revolution, insurrection, or military or usurped power.
+
+G. Patent Infringement — any actual or alleged infringement of any patent.
+
+H. Trade Secrets — any actual or alleged misappropriation of trade secrets.
+
+I. Securities — any Claim arising under securities laws or regulations.
+
+SECTION IV — CONDITIONS
+
+A. Notice — The Insured shall notify the Insurer as soon as practicable, but no later than 60 days after discovery, of any Security Incident, Claim, or circumstance that may give rise to a Claim.
+
+B. Cooperation — The Insured shall cooperate with the Insurer in the investigation, defense, and settlement of any Claim.
+
+C. Consent to Settle — The Insurer shall not settle any Claim without the Insured's written consent. If the Insured refuses to consent to a settlement recommended by the Insurer, the Insurer's liability shall not exceed the amount for which the Claim could have been settled plus Defense Costs incurred up to the date of the refusal.
+
+D. Subrogation — The Insurer shall be subrogated to the Insured's rights of recovery against any third party.
+
+E. Other Insurance — This Policy shall be excess over any other valid and collectible insurance, unless such other insurance is specifically written as excess of this Policy.
+
+F. Policy Limits — The Insurer's maximum liability for all Claims, losses, and costs under this Policy during the Policy Period shall not exceed the Aggregate Limit of Liability stated in the Declarations.
+
+SECTION V — GENERAL PROVISIONS
+
+A. Territory — This Policy applies to Security Incidents and Claims anywhere in the world, provided that any Claim is brought in the United States, its territories, or Canada.
+
+B. Assignment — This Policy may not be assigned without the prior written consent of the Insurer.
+
+C. Entire Agreement — This Policy, including the Declarations and any endorsements, constitutes the entire agreement between the parties.

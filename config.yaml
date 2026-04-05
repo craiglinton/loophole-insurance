@@ -1,10 +1,10 @@
 model:
-  default: "claude-sonnet-4-20250514"
+  default: "minimax-m2.7:cloud"
   max_tokens: 4096
 
 temperatures:
-  legislator: 0.4
-  loophole_finder: 0.9
+  drafter: 0.4
+  gap_finder: 0.9
   overreach_finder: 0.9
   judge: 0.3
 
