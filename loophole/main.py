@@ -4,11 +4,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import questionary
 import typer
 import yaml
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Prompt
 from rich.rule import Rule
 from rich.table import Table
 
@@ -25,6 +26,7 @@ app = typer.Typer(name="loophole", add_completion=False)
 console = Console()
 
 TEMPLATES_DIR = Path("templates")
+CONFIG_PATH = Path("config.yaml")
 
 
 # ---------------------------------------------------------------------------
@@ -44,9 +46,8 @@ class MenuContext:
 # ---------------------------------------------------------------------------
 
 def _load_config() -> dict:
-    config_path = Path("config.yaml")
-    if config_path.exists():
-        return yaml.safe_load(config_path.read_text())
+    if CONFIG_PATH.exists():
+        return yaml.safe_load(CONFIG_PATH.read_text())
     return {
         "model": {"default": "minimax-m2.7:cloud", "max_tokens": 8192},
         "temperatures": {
@@ -57,7 +58,63 @@ def _load_config() -> dict:
         },
         "loop": {"max_rounds": 10, "cases_per_agent": 3},
         "session_dir": "sessions",
+        "verbose": False,
     }
+
+
+def _save_config(config: dict) -> None:
+    CONFIG_PATH.write_text(yaml.safe_dump(config, default_flow_style=False))
+
+
+def _first_template_file(directory: Path) -> Path | None:
+    """Return the first .txt/.md file alphabetically in *directory*, or None."""
+    if not directory.exists():
+        return None
+    files = sorted(
+        f for f in directory.iterdir()
+        if f.is_file() and f.suffix in (".txt", ".md")
+    )
+    return files[0] if files else None
+
+
+def _resolve_selection(directory: Path, saved_name: str | None) -> Path | None:
+    """Resolve a saved filename back to a full Path, falling back to the first
+    file in the directory if the saved file no longer exists."""
+    if saved_name:
+        candidate = directory / saved_name
+        if candidate.exists():
+            return candidate
+    return _first_template_file(directory)
+
+
+def _init_selections(ctx: MenuContext) -> None:
+    """Populate MenuContext from config.yaml selections (or first-file defaults)."""
+    saved = ctx.config.get("selections", {})
+    ctx.selected_policy = _resolve_selection(
+        TEMPLATES_DIR / "policies", saved.get("policy"),
+    )
+    ctx.selected_guidelines = _resolve_selection(
+        TEMPLATES_DIR / "guidelines", saved.get("guidelines"),
+    )
+    ctx.selected_endorsement_template = _resolve_selection(
+        TEMPLATES_DIR / "endorsements", saved.get("endorsement_template"),
+    )
+
+
+def _persist_selections(ctx: MenuContext) -> None:
+    """Write current selections into config.yaml so they survive restarts."""
+    ctx.config.setdefault("selections", {})
+    ctx.config["selections"]["policy"] = (
+        ctx.selected_policy.name if ctx.selected_policy else None
+    )
+    ctx.config["selections"]["guidelines"] = (
+        ctx.selected_guidelines.name if ctx.selected_guidelines else None
+    )
+    ctx.config["selections"]["endorsement_template"] = (
+        ctx.selected_endorsement_template.name
+        if ctx.selected_endorsement_template else None
+    )
+    _save_config(ctx.config)
 
 
 def _build_agents(config: dict) -> dict:
@@ -136,6 +193,18 @@ def _get_multiline_input(prompt_text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _verbose(title: str, content: str, style: str = "dim") -> None:
+    """Print a verbose-mode panel. Only call when verbose is enabled."""
+    console.print(
+        Panel(
+            f"[{style}]{content}[/{style}]",
+            title=f"[dim]{title}[/dim]",
+            border_style="dim",
+            padding=(0, 2),
+        )
+    )
+
+
 def _display_round_summary(state, total, auto, escalated):
     console.print()
     table = Table(title=f"Round {state.current_round} Summary", show_header=False)
@@ -166,36 +235,26 @@ def _print_banner():
 
 
 def _print_selections(ctx: MenuContext):
-    policy_name = ctx.selected_policy.name if ctx.selected_policy else None
-    guidelines_name = ctx.selected_guidelines.name if ctx.selected_guidelines else None
-    template_name = ctx.selected_endorsement_template.name if ctx.selected_endorsement_template else None
-
     console.print()
     console.print("  [bold]Current selections:[/bold]")
-    if policy_name:
-        console.print(f"    Policy:      [green]{policy_name}[/green]")
+
+    if ctx.selected_policy:
+        console.print(f"    Policy:      [green]{ctx.selected_policy.name}[/green]")
     else:
-        console.print("    Policy:      [dim](none)[/dim]")
-    if guidelines_name:
-        console.print(f"    Guidelines:  [green]{guidelines_name}[/green]")
+        console.print("    Policy:      [dim](none — add files to templates/policies/)[/dim]")
+
+    if ctx.selected_guidelines:
+        console.print(f"    Guidelines:  [green]{ctx.selected_guidelines.name}[/green]")
     else:
-        console.print("    Guidelines:  [dim](default)[/dim]")
-    if template_name:
-        console.print(f"    Template:    [green]{template_name}[/green]")
+        console.print("    Guidelines:  [dim](none — add files to templates/guidelines/)[/dim]")
+
+    if ctx.selected_endorsement_template:
+        console.print(f"    Template:    [green]{ctx.selected_endorsement_template.name}[/green]")
     else:
-        console.print("    Template:    [dim](none)[/dim]")
+        console.print("    Template:    [dim](none — add files to templates/endorsements/)[/dim]")
+
     console.print()
 
-
-def _print_menu():
-    console.print("  1. [bold]Configure[/bold]              [dim]LLM settings, loop parameters[/dim]")
-    console.print("  2. [bold]Select policy[/bold]           [dim]Base policy to modify[/dim]")
-    console.print("  3. [bold]Select guidelines[/bold]       [dim]Endorsement drafting guidelines[/dim]")
-    console.print("  4. [bold]Select template[/bold]         [dim]Endorsement format template[/dim]")
-    console.print("  5. [bold]Start new session[/bold]       [dim]Draft and stress-test an endorsement[/dim]")
-    console.print("  6. [bold]Previous sessions[/bold]       [dim]Resume or review past sessions[/dim]")
-    console.print("  7. [bold]Exit[/bold]")
-    console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -208,65 +267,76 @@ def _configure_menu(ctx: MenuContext):
         config = ctx.config
         console.print(Rule("[bold] Configure [/bold]", style="cyan"))
         console.print()
-        console.print(f"  1. Model             [{config['model']['default']}]")
-        console.print(f"  2. Max output tokens  [{config['model']['max_tokens']}]")
-        console.print(f"  3. Drafter temp       [{config['temperatures']['drafter']}]")
-        console.print(f"  4. Gap finder temp    [{config['temperatures']['gap_finder']}]")
-        console.print(f"  5. Overreach temp     [{config['temperatures']['overreach_finder']}]")
-        console.print(f"  6. Judge temp         [{config['temperatures']['judge']}]")
-        console.print(f"  7. Max rounds         [{config['loop']['max_rounds']}]")
-        console.print(f"  8. Cases per agent    [{config['loop']['cases_per_agent']}]")
-        console.print(f"  9. [bold]Save to config.yaml[/bold]")
-        console.print(f"  0. [bold]Back[/bold]")
-        console.print()
 
-        choice = Prompt.ask("Select", default="0")
+        choice = questionary.select(
+            "Configure:",
+            choices=[
+                questionary.Choice(f"Model              [{config['model']['default']}]", value="model"),
+                questionary.Choice(f"Max output tokens  [{config['model']['max_tokens']}]", value="max_tokens"),
+                questionary.Choice(f"Drafter temp       [{config['temperatures']['drafter']}]", value="drafter"),
+                questionary.Choice(f"Gap finder temp    [{config['temperatures']['gap_finder']}]", value="gap_finder"),
+                questionary.Choice(f"Overreach temp     [{config['temperatures']['overreach_finder']}]", value="overreach"),
+                questionary.Choice(f"Judge temp         [{config['temperatures']['judge']}]", value="judge"),
+                questionary.Choice(f"Max rounds         [{config['loop']['max_rounds']}]", value="max_rounds"),
+                questionary.Choice(f"Cases per agent    [{config['loop']['cases_per_agent']}]", value="cases_per_agent"),
+                questionary.Choice(f"Verbose mode       [{'ON' if config.get('verbose', False) else 'OFF'}]", value="verbose"),
+                questionary.Choice("Save to config.yaml", value="save"),
+                questionary.Choice("Back", value="back"),
+            ],
+        ).ask()
 
-        if choice == "1":
-            config["model"]["default"] = Prompt.ask("Model name", default=config["model"]["default"])
-        elif choice == "2":
-            config["model"]["max_tokens"] = int(Prompt.ask("Max output tokens", default=str(config["model"]["max_tokens"])))
-        elif choice == "3":
-            config["temperatures"]["drafter"] = float(Prompt.ask("Drafter temperature", default=str(config["temperatures"]["drafter"])))
-        elif choice == "4":
-            config["temperatures"]["gap_finder"] = float(Prompt.ask("Gap finder temperature", default=str(config["temperatures"]["gap_finder"])))
-        elif choice == "5":
-            config["temperatures"]["overreach_finder"] = float(Prompt.ask("Overreach temperature", default=str(config["temperatures"]["overreach_finder"])))
-        elif choice == "6":
-            config["temperatures"]["judge"] = float(Prompt.ask("Judge temperature", default=str(config["temperatures"]["judge"])))
-        elif choice == "7":
-            config["loop"]["max_rounds"] = int(Prompt.ask("Max rounds", default=str(config["loop"]["max_rounds"])))
-        elif choice == "8":
-            config["loop"]["cases_per_agent"] = int(Prompt.ask("Cases per agent", default=str(config["loop"]["cases_per_agent"])))
-        elif choice == "9":
-            Path("config.yaml").write_text(yaml.safe_dump(config, default_flow_style=False))
-            console.print("[green]Saved to config.yaml[/green]")
-        elif choice == "0":
+        if choice is None or choice == "back":
             break
+        elif choice == "model":
+            config["model"]["default"] = Prompt.ask("Model name", default=config["model"]["default"])
+        elif choice == "max_tokens":
+            config["model"]["max_tokens"] = int(Prompt.ask("Max output tokens", default=str(config["model"]["max_tokens"])))
+        elif choice == "drafter":
+            config["temperatures"]["drafter"] = float(Prompt.ask("Drafter temperature", default=str(config["temperatures"]["drafter"])))
+        elif choice == "gap_finder":
+            config["temperatures"]["gap_finder"] = float(Prompt.ask("Gap finder temperature", default=str(config["temperatures"]["gap_finder"])))
+        elif choice == "overreach":
+            config["temperatures"]["overreach_finder"] = float(Prompt.ask("Overreach temperature", default=str(config["temperatures"]["overreach_finder"])))
+        elif choice == "judge":
+            config["temperatures"]["judge"] = float(Prompt.ask("Judge temperature", default=str(config["temperatures"]["judge"])))
+        elif choice == "max_rounds":
+            config["loop"]["max_rounds"] = int(Prompt.ask("Max rounds", default=str(config["loop"]["max_rounds"])))
+        elif choice == "cases_per_agent":
+            config["loop"]["cases_per_agent"] = int(Prompt.ask("Cases per agent", default=str(config["loop"]["cases_per_agent"])))
+        elif choice == "verbose":
+            config["verbose"] = not config.get("verbose", False)
+            status = "ON" if config["verbose"] else "OFF"
+            console.print(f"[green]Verbose mode: {status}[/green]")
+        elif choice == "save":
+            _save_config(config)
+            console.print("[green]Saved to config.yaml[/green]")
 
 
 def _select_policy(ctx: MenuContext):
     selected = browse_and_select(TEMPLATES_DIR / "policies", "Policy", console)
     if selected:
         ctx.selected_policy = selected
+        _persist_selections(ctx)
 
 
 def _select_guidelines(ctx: MenuContext):
     selected = browse_and_select(TEMPLATES_DIR / "guidelines", "Guidelines", console)
     if selected:
         ctx.selected_guidelines = selected
+        _persist_selections(ctx)
 
 
 def _select_endorsement_template(ctx: MenuContext):
     selected = browse_and_select(TEMPLATES_DIR / "endorsements", "Endorsement Template", console)
     if selected:
         ctx.selected_endorsement_template = selected
+        _persist_selections(ctx)
 
 
 def _start_new_session(ctx: MenuContext):
     """Gather remaining inputs and launch a drafting session."""
     if not ctx.selected_policy:
-        console.print("[red]Please select a base policy first (option 2).[/red]")
+        console.print("[red]No policy available. Add a .txt or .md file to templates/policies/.[/red]")
         return
 
     # Load file contents
@@ -319,7 +389,8 @@ def _start_new_session(ctx: MenuContext):
     )
     _display_endorsement(state.current_endorsement)
 
-    if Confirm.ask("Begin adversarial testing?", default=True):
+    begin = questionary.confirm("Begin adversarial testing?", default=True).ask()
+    if begin:
         _run_adversarial_loop(state, agents, session_mgr, config)
 
 
@@ -331,22 +402,25 @@ def _previous_sessions_menu(ctx: MenuContext):
     while True:
         console.print(Rule("[bold] Previous Sessions [/bold]", style="cyan"))
         console.print()
-        console.print("  1. [bold]Resume a session[/bold]")
-        console.print("  2. [bold]List all sessions[/bold]")
-        console.print("  3. [bold]Visualize a session[/bold]")
-        console.print("  0. [bold]Back[/bold]")
-        console.print()
 
-        choice = Prompt.ask("Select", default="0")
+        choice = questionary.select(
+            "Previous sessions:",
+            choices=[
+                questionary.Choice("Resume a session", value="resume"),
+                questionary.Choice("List all sessions", value="list"),
+                questionary.Choice("Visualize a session", value="visualize"),
+                questionary.Choice("Back", value="back"),
+            ],
+        ).ask()
 
-        if choice == "1":
-            _resume_session(ctx)
-        elif choice == "2":
-            _list_sessions(ctx)
-        elif choice == "3":
-            _visualize_session(ctx)
-        elif choice == "0":
+        if choice is None or choice == "back":
             break
+        elif choice == "resume":
+            _resume_session(ctx)
+        elif choice == "list":
+            _list_sessions(ctx)
+        elif choice == "visualize":
+            _visualize_session(ctx)
 
 
 def _list_sessions(ctx: MenuContext):
@@ -380,29 +454,16 @@ def _resume_session(ctx: MenuContext):
         console.print("[red]No sessions found.[/red]")
         return
 
-    table = Table(title="Available Sessions")
-    table.add_column("#", style="dim")
-    table.add_column("Session ID")
-    table.add_column("Domain")
-    table.add_column("Round")
-    table.add_column("Cases")
-    table.add_column("Endorsement Version")
-    for i, s in enumerate(sessions, 1):
-        table.add_row(
-            str(i), s["id"], s["domain"],
-            str(s["round"]), str(s["cases"]), f"v{s['endorsement_version']}"
-        )
-    console.print(table)
+    choices = []
+    for s in sessions:
+        label = f"{s['id']}  (round {s['round']}, {s['cases']} cases, v{s['endorsement_version']})"
+        choices.append(questionary.Choice(title=label, value=s["id"]))
+    choices.append(questionary.Choice(title="Cancel", value=None))
 
-    choice = Prompt.ask("Select session number (0 to cancel)", default="0")
-    try:
-        idx = int(choice)
-    except ValueError:
-        return
-    if idx == 0 or idx > len(sessions):
+    session_id = questionary.select("Select session to resume:", choices=choices).ask()
+    if session_id is None:
         return
 
-    session_id = sessions[idx - 1]["id"]
     state = session_mgr.load(session_id)
     agents = _build_agents(config)
 
@@ -425,24 +486,16 @@ def _visualize_session(ctx: MenuContext):
         console.print("[red]No sessions found.[/red]")
         return
 
-    table = Table(title="Available Sessions")
-    table.add_column("#", style="dim")
-    table.add_column("Session ID")
-    table.add_column("Domain")
-    table.add_column("Cases")
-    for i, s in enumerate(sessions, 1):
-        table.add_row(str(i), s["id"], s["domain"], str(s["cases"]))
-    console.print(table)
+    choices = []
+    for s in sessions:
+        label = f"{s['id']}  ({s['domain']}, {s['cases']} cases)"
+        choices.append(questionary.Choice(title=label, value=s["id"]))
+    choices.append(questionary.Choice(title="Cancel", value=None))
 
-    choice = Prompt.ask("Select session number (0 to cancel)", default="0")
-    try:
-        idx = int(choice)
-    except ValueError:
-        return
-    if idx == 0 or idx > len(sessions):
+    session_id = questionary.select("Select session to visualize:", choices=choices).ask()
+    if session_id is None:
         return
 
-    session_id = sessions[idx - 1]["id"]
     state = session_mgr.load(session_id)
 
     from loophole.visualize import generate_html
@@ -456,6 +509,7 @@ def _visualize_session(ctx: MenuContext):
 
 def _run_adversarial_loop(state, agents, session_mgr, config):
     max_rounds = config["loop"]["max_rounds"]
+    verbose = config.get("verbose", False)
     drafter: EndorsementDrafter = agents["drafter"]
     gap_finder: GapFinder = agents["gap_finder"]
     overreach_finder: OverreachFinder = agents["overreach"]
@@ -481,7 +535,8 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                 "\n[green bold]No failures found! "
                 "The endorsement appears robust against this round of testing.[/green bold]"
             )
-            if not Confirm.ask("Run another round to be sure?", default=False):
+            again = questionary.confirm("Run another round to be sure?", default=False).ask()
+            if not again:
                 break
             continue
 
@@ -497,6 +552,12 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
             console.print("  [dim]Judge evaluating...[/dim]", end="")
             result = judge.evaluate(state, case_obj)
 
+            if verbose and result.reasoning:
+                console.print()  # newline after "Judge evaluating..."
+                _verbose("Judge Reasoning", result.reasoning)
+            if verbose and result.proposed_revision:
+                _verbose("Proposed Revision", result.proposed_revision)
+
             if result.resolvable:
                 if result.proposed_revision and state.resolved_cases:
                     console.print(" [dim]validating...[/dim]", end="")
@@ -506,8 +567,16 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                     case_obj.resolved_by = "judge"
 
                     revised = drafter.revise(state, case_obj)
+                    if verbose and revised.changelog:
+                        _verbose(f"Changelog (v{revised.version})", revised.changelog)
 
                     validation = judge.validate(state, revised.text)
+                    if verbose and validation.details:
+                        _verbose(
+                            f"Validation {'PASSED' if validation.passes else 'FAILED'}",
+                            validation.details,
+                            style="green dim" if validation.passes else "red dim",
+                        )
                     if validation.passes:
                         state.current_endorsement = revised
                         state.endorsement_history.append(revised)
@@ -520,7 +589,7 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                         case_obj.resolution = None
                         case_obj.resolved_by = None
                         console.print(" [red]Validation failed -- escalating[/red]")
-                        _escalate(state, case_obj, validation.details, drafter)
+                        _escalate(state, case_obj, validation.details, drafter, verbose)
                         round_escalated += 1
                 else:
                     case_obj.resolution = result.resolution_summary or result.reasoning
@@ -528,6 +597,8 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                     case_obj.resolved_by = "judge"
 
                     revised = drafter.revise(state, case_obj)
+                    if verbose and revised.changelog:
+                        _verbose(f"Changelog (v{revised.version})", revised.changelog)
                     state.current_endorsement = revised
                     state.endorsement_history.append(revised)
                     console.print(
@@ -536,7 +607,7 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
                     round_auto += 1
             else:
                 console.print(" [red bold]Cannot resolve -- escalating to you[/red bold]")
-                _escalate(state, case_obj, result.conflict_explanation or result.reasoning, drafter)
+                _escalate(state, case_obj, result.conflict_explanation or result.reasoning, drafter, verbose)
                 round_escalated += 1
 
             session_mgr.save(state)
@@ -544,16 +615,21 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
         _display_round_summary(state, len(all_cases), round_auto, round_escalated)
 
         console.print()
-        action = Prompt.ask(
-            "[bold]Next?[/bold]",
-            choices=["continue", "view endorsement", "stop"],
-            default="continue",
-        )
-        if action == "view endorsement":
+        action = questionary.select(
+            "Next?",
+            choices=[
+                questionary.Choice("Continue to next round", value="continue"),
+                questionary.Choice("View current endorsement", value="view"),
+                questionary.Choice("Stop", value="stop"),
+            ],
+        ).ask()
+
+        if action == "view":
             _display_endorsement(state.current_endorsement)
-            if not Confirm.ask("Continue to next round?", default=True):
+            cont = questionary.confirm("Continue to next round?", default=True).ask()
+            if not cont:
                 break
-        elif action == "stop":
+        elif action == "stop" or action is None:
             break
 
     console.print(Rule("[bold green] Session Complete [/bold green]", style="green"))
@@ -571,7 +647,7 @@ def _run_adversarial_loop(state, agents, session_mgr, config):
     console.print(f"[bold blue]HTML report:[/bold blue] {report_path}")
 
 
-def _escalate(state, case_obj, conflict_text, drafter):
+def _escalate(state, case_obj, conflict_text, drafter, verbose: bool = False):
     console.print(
         Panel(
             f"[bold]The judge could not resolve this case without breaking prior rulings.[/bold]\n\n"
@@ -595,6 +671,8 @@ def _escalate(state, case_obj, conflict_text, drafter):
 
     console.print("  [dim]Updating endorsement...[/dim]")
     revised = drafter.revise(state, case_obj)
+    if verbose and revised.changelog:
+        _verbose(f"Changelog (v{revised.version})", revised.changelog)
     state.current_endorsement = revised
     state.endorsement_history.append(revised)
     console.print(f"  [green]Endorsement updated -> v{revised.version}[/green]")
@@ -612,27 +690,38 @@ def main(ctx: typer.Context):
 
     config = _load_config()
     menu_ctx = MenuContext(config=config)
+    _init_selections(menu_ctx)
 
     while True:
         _print_banner()
         _print_selections(menu_ctx)
-        _print_menu()
 
-        choice = Prompt.ask("Select", choices=["1", "2", "3", "4", "5", "6", "7"], default="7")
+        choice = questionary.select(
+            "Main menu:",
+            choices=[
+                questionary.Choice("Configure              LLM settings, loop parameters", value="configure"),
+                questionary.Choice("Select policy           Base policy to modify", value="policy"),
+                questionary.Choice("Select guidelines       Endorsement drafting guidelines", value="guidelines"),
+                questionary.Choice("Select template         Endorsement format template", value="template"),
+                questionary.Choice("Start new session       Draft and stress-test an endorsement", value="new_session"),
+                questionary.Choice("Previous sessions       Resume or review past sessions", value="previous"),
+                questionary.Choice("Exit", value="exit"),
+            ],
+        ).ask()
 
-        if choice == "1":
+        if choice == "configure":
             _configure_menu(menu_ctx)
-        elif choice == "2":
+        elif choice == "policy":
             _select_policy(menu_ctx)
-        elif choice == "3":
+        elif choice == "guidelines":
             _select_guidelines(menu_ctx)
-        elif choice == "4":
+        elif choice == "template":
             _select_endorsement_template(menu_ctx)
-        elif choice == "5":
+        elif choice == "new_session":
             _start_new_session(menu_ctx)
-        elif choice == "6":
+        elif choice == "previous":
             _previous_sessions_menu(menu_ctx)
-        elif choice == "7":
+        elif choice == "exit" or choice is None:
             raise typer.Exit()
 
 

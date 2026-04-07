@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import questionary
 from rich.console import Console
-from rich.prompt import Prompt
-from rich.table import Table
 
 
 def browse_and_select(directory: Path, label: str, console: Console) -> Path | None:
-    """List files in a directory and let the user pick one.
+    """List files in a directory and let the user pick one with arrow keys.
 
     Returns the selected Path, or None if the user cancels.
     """
@@ -28,39 +27,28 @@ def browse_and_select(directory: Path, label: str, console: Console) -> Path | N
         console.print(f"[dim]Add .txt or .md files to this directory to use them.[/dim]")
         return None
 
-    table = Table(title=f"Available {label} Templates")
-    table.add_column("#", style="dim", width=4)
-    table.add_column("File")
-    table.add_column("Preview", style="dim", max_width=60)
-
-    for i, f in enumerate(files, 1):
-        # Read first ~80 chars as a preview
+    # Build choices with preview text
+    choices = []
+    for f in files:
         try:
-            preview = f.read_text()[:120].replace("\n", " ").strip()
-            if len(f.read_text()) > 120:
+            preview = f.read_text()[:80].replace("\n", " ").strip()
+            if len(f.read_text()) > 80:
                 preview += "..."
         except Exception:
-            preview = "(unable to read)"
-        table.add_row(str(i), f.name, preview)
+            preview = ""
+        display = f"{f.name}  ({preview})" if preview else f.name
+        choices.append(questionary.Choice(title=display, value=str(f)))
 
-    console.print()
-    console.print(table)
-    console.print("[dim]Enter 0 to cancel[/dim]")
+    choices.append(questionary.Choice(title="Cancel", value=None))
 
-    choice = Prompt.ask(f"Select {label.lower()}", default="0")
+    result = questionary.select(
+        f"Select {label.lower()}:",
+        choices=choices,
+    ).ask()
 
-    try:
-        idx = int(choice)
-    except ValueError:
-        console.print("[red]Invalid selection.[/red]")
+    if result is None:
         return None
 
-    if idx == 0:
-        return None
-    if idx < 1 or idx > len(files):
-        console.print("[red]Invalid selection.[/red]")
-        return None
-
-    selected = files[idx - 1]
+    selected = Path(result)
     console.print(f"[green]Selected:[/green] {selected.name}")
     return selected

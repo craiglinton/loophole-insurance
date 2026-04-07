@@ -1,15 +1,17 @@
+loop:
+  cases_per_agent: 3
+  max_rounds: 10
 model:
-  default: "minimax-m2.7:cloud"
+  default: minimax-m2.7:cloud
   max_tokens: 8192
-
+selections:
+  endorsement_template: Cancel
+  guidelines: Cancel
+  policy: Cancel
+session_dir: sessions
 temperatures:
   drafter: 0.4
   gap_finder: 0.9
-  overreach_finder: 0.9
   judge: 0.3
-
-loop:
-  max_rounds: 10
-  cases_per_agent: 3
-
-session_dir: "sessions"
+  overreach_finder: 0.9
+verbose: true
